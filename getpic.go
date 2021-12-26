@@ -7,6 +7,9 @@ import (
 	"crypto/tls"
 	"encoding/hex"
 	"fmt"
+	"github.com/dsoprea/go-exif/v3"
+	"github.com/dsoprea/go-exif/v3/undefined"
+	jpgs "github.com/dsoprea/go-jpeg-image-structure/v2"
 	"github.com/mmcdole/gofeed"
 	"io/ioutil"
 	"net/http"
@@ -15,6 +18,11 @@ import (
 	"regexp"
 	"time"
 )
+
+type oneItem struct {
+	url  string
+	desc string
+}
 
 func main() {
 	var tr = &http.Transport{
@@ -43,8 +51,9 @@ func main() {
 	_ = os.MkdirAll("pics", os.ModeDir|0755)
 	_ = os.MkdirAll("libpics", os.ModeDir|0755)
 
-	getOne := func(url string) error {
-		h := md5.Sum([]byte(url))
+	getOne := func(item *oneItem) error {
+		u := item.url
+		h := md5.Sum([]byte(u))
 		fileName := hex.EncodeToString(h[:])
 		dir := fmt.Sprintf("libpics%c%s%c%s", os.PathSeparator, fileName[:1], os.PathSeparator, fileName[1:2])
 		libfilePath := fmt.Sprintf("%s%c%s", dir, os.PathSeparator, fileName)
@@ -56,12 +65,12 @@ func main() {
 		}
 
 		if flag {
-			fmt.Printf("the file: %s was downloaded.\n", url)
+			fmt.Printf("the file: %s was downloaded.\n", u)
 			return nil
 		}
 
 		start := time.Now()
-		req, err := http.NewRequest(http.MethodGet, url, nil)
+		req, err := http.NewRequest(http.MethodGet, u, nil)
 		if err != nil {
 			fmt.Println(err)
 			return err
@@ -83,6 +92,47 @@ func main() {
 			return err
 		}
 
+		ft := getFileType(pic)
+		if ft == ".jpg" {
+			p := jpgs.NewJpegMediaParser()
+			intfc, err := p.ParseBytes(pic)
+			if err != nil {
+				fmt.Println(err)
+				return err
+			}
+
+			sl := intfc.(*jpgs.SegmentList)
+			rootIb, err := sl.ConstructExifBuilder()
+			if err != nil {
+				fmt.Println(err)
+				return err
+			}
+			exifIb, err := exif.GetOrCreateIbFromRootIb(rootIb, "IFD/Exif")
+			if err != nil {
+				fmt.Println(err)
+				return err
+			}
+			uc := exifundefined.Tag9286UserComment{
+				EncodingType:  exifundefined.TagUndefinedType_9286_UserComment_Encoding_UNICODE,
+				EncodingBytes: []byte(item.desc),
+			}
+			err = exifIb.SetStandardWithName("UserComment", uc)
+			if err != nil {
+				fmt.Println(err)
+				return err
+			}
+
+			err = sl.SetExif(rootIb)
+			if err != nil {
+				fmt.Println(err)
+				return err
+			}
+
+			b := new(bytes.Buffer)
+			err = sl.Write(b)
+			pic = b.Bytes()
+		}
+
 		filePath := fmt.Sprintf("pics%c%s%s", os.PathSeparator, fileName, getFileType(pic))
 		f, err := os.OpenFile(filePath, os.O_RDWR|os.O_CREATE, 0755)
 		if err != nil {
@@ -91,6 +141,7 @@ func main() {
 		}
 		w := bufio.NewWriter(f)
 		n, err := w.Write(pic)
+
 		if err != nil || n != len(pic) {
 			fmt.Println(err)
 			_ = os.Remove(filePath)
@@ -107,7 +158,7 @@ func main() {
 			return err
 		}
 
-		fmt.Printf("done one url: %s, file: %s, cost: %dms\n", url, filePath, time.Since(start)/time.Millisecond)
+		fmt.Printf("done one u: %s, file: %s, cost: %dms\n", u, filePath, time.Since(start)/time.Millisecond)
 		return nil
 	}
 
@@ -116,7 +167,7 @@ func main() {
 			reg := regexp.MustCompile(`<img style src="(.*?=orig)"`)
 			ss := reg.FindAllStringSubmatch(i.Description, 1)
 			if len(ss) == 1 && len(ss[0]) == 2 {
-				_ = getOne(ss[0][1])
+				_ = getOne(&oneItem{url: ss[0][1], desc: i.Description})
 			}
 		}
 	}
