@@ -31,27 +31,19 @@ func main() {
 		Timeout:   45 * time.Second,
 	}
 
+	s := time.Now()
 	parser := gofeed.NewParser()
 	feed, err := parser.ParseURL("https://rsshub.rssforever.com/twitter/user/seanwei001")
 	if err != nil {
 		fmt.Println(err)
 		return
 	}
+	fmt.Printf("get all feeds cost %dms\n", time.Since(s)/time.Millisecond)
+
 	_ = os.MkdirAll("pics", os.ModeDir|0755)
 	_ = os.MkdirAll("libpics", os.ModeDir|0755)
 
 	getOne := func(url string) error {
-		req, err := http.NewRequest(http.MethodGet, url, nil)
-		if err != nil {
-			fmt.Println(err)
-			return err
-		}
-		res, err := client.Do(req)
-		if err != nil {
-			fmt.Println(err)
-			return err
-		}
-
 		h := md5.Sum([]byte(url))
 		fileName := hex.EncodeToString(h[:])
 		dir := fmt.Sprintf("libpics%c%s%c%s", os.PathSeparator, fileName[:1], os.PathSeparator, fileName[1:2])
@@ -64,6 +56,24 @@ func main() {
 		}
 
 		if flag {
+			fmt.Printf("the file: %s was downloaded.\n", url)
+			return nil
+		}
+
+		start := time.Now()
+		req, err := http.NewRequest(http.MethodGet, url, nil)
+		if err != nil {
+			fmt.Println(err)
+			return err
+		}
+		res, err := client.Do(req)
+		if err != nil {
+			fmt.Println(err)
+			return err
+		}
+
+		if res.StatusCode != 200 {
+			fmt.Println("some err: ", res)
 			return nil
 		}
 
@@ -97,18 +107,20 @@ func main() {
 			return err
 		}
 
+		fmt.Printf("done one url: %s, file: %s, cost: %dms\n", url, filePath, time.Since(start)/time.Millisecond)
 		return nil
 	}
 
 	if len(feed.Items) > 0 {
 		for _, i := range feed.Items {
-			reg := regexp.MustCompile(`<img style src="(.*=orig)"`)
+			reg := regexp.MustCompile(`<img style src="(.*?=orig)"`)
 			ss := reg.FindAllStringSubmatch(i.Description, 1)
 			if len(ss) == 1 && len(ss[0]) == 2 {
 				_ = getOne(ss[0][1])
 			}
 		}
 	}
+	fmt.Printf("done one round costs: %dms\n", time.Since(s)/time.Millisecond)
 
 }
 
