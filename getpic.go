@@ -164,15 +164,20 @@ func main() {
 
 	if len(feed.Items) > 0 {
 		for _, i := range feed.Items {
-			reg := regexp.MustCompile(`<img style src="(.*?=orig)"`)
-			ss := reg.FindAllStringSubmatch(i.Description, 1)
-			if len(ss) == 1 && len(ss[0]) == 2 {
-				_ = getOne(&oneItem{url: ss[0][1], desc: i.Description})
+			reg := regexp.MustCompile(`<img style src="(.*?=orig)"+`)
+			ss := reg.FindAllStringSubmatch(i.Description, -1)
+			if len(ss) == 0 {
+				continue
+			}
+
+			for _, j := range ss {
+				if len(j) == 2 {
+					_ = getOne(&oneItem{url: j[1], desc: i.Description})
+				}
 			}
 		}
 	}
 	fmt.Printf("done one round costs: %dms\n", time.Since(s)/time.Millisecond)
-
 }
 
 func isFileExist(filePath string) (bool, error) {
