@@ -113,10 +113,21 @@ func main() {
 				return err
 			}
 			uc := exifundefined.Tag9286UserComment{
-				EncodingType:  exifundefined.TagUndefinedType_9286_UserComment_Encoding_UNICODE,
+				EncodingType:  exifundefined.TagUndefinedType_9286_UserComment_Encoding_ASCII,
 				EncodingBytes: []byte(item.desc),
 			}
 			err = exifIb.SetStandardWithName("UserComment", uc)
+			if err != nil {
+				fmt.Println(err)
+				return err
+			}
+
+			exifIb, err = exif.GetOrCreateIbFromRootIb(rootIb, "IFD")
+			if err != nil {
+				fmt.Println(err)
+				return err
+			}
+			err = exifIb.SetStandardWithName("Make", "None")
 			if err != nil {
 				fmt.Println(err)
 				return err
