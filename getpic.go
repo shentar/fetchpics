@@ -45,6 +45,7 @@ func main() {
 		"newsNZcn",
 		"vischina",
 		"gushilishi",
+		"cma_photo_dept",
 	}
 
 	for _, account := range accounts {
