@@ -39,14 +39,27 @@ func main() {
 		Timeout:   45 * time.Second,
 	}
 
+	accounts := []string{
+		"seanwei001",
+		"tongbingxue",
+		"newsNZcn",
+		"vischina",
+	}
+
+	for _, account := range accounts {
+		dealWithOneUrl(client, "https://rsshub.rssforever.com/twitter/user/"+account)
+	}
+}
+
+func dealWithOneUrl(client *http.Client, url string) {
 	s := time.Now()
 	parser := gofeed.NewParser()
-	feed, err := parser.ParseURL("https://rsshub.rssforever.com/twitter/user/seanwei001")
+	feed, err := parser.ParseURL(url)
 	if err != nil {
 		fmt.Println(err)
 		return
 	}
-	fmt.Printf("get all feeds cost %dms\n", time.Since(s)/time.Millisecond)
+	fmt.Printf("[%s], get all feeds cost %dms\n", url, time.Since(s)/time.Millisecond)
 
 	_ = os.MkdirAll("pics", os.ModeDir|0755)
 	_ = os.MkdirAll("libpics", os.ModeDir|0755)
@@ -188,7 +201,7 @@ func main() {
 			}
 		}
 	}
-	fmt.Printf("done one round costs: %dms\n", time.Since(s)/time.Millisecond)
+	fmt.Printf("[%s], done one round costs: %dms\n", url, time.Since(s)/time.Millisecond)
 }
 
 func isFileExist(filePath string) (bool, error) {
