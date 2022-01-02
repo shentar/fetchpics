@@ -44,6 +44,7 @@ func main() {
 		"tongbingxue",
 		"newsNZcn",
 		"vischina",
+		"gushilishi",
 	}
 
 	for _, account := range accounts {
