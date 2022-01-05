@@ -11,6 +11,7 @@ import (
 	"github.com/dsoprea/go-exif/v3/undefined"
 	jpgs "github.com/dsoprea/go-jpeg-image-structure/v2"
 	"github.com/mmcdole/gofeed"
+	"gopkg.in/yaml.v2"
 	"io/ioutil"
 	"net/http"
 	"net/url"
@@ -22,6 +23,10 @@ import (
 type oneItem struct {
 	url  string
 	desc string
+}
+
+type Conf struct {
+	Accounts []string `yaml:"accounts"`
 }
 
 func main() {
@@ -39,18 +44,36 @@ func main() {
 		Timeout:   45 * time.Second,
 	}
 
-	accounts := []string{
-		"seanwei001",
-		"tongbingxue",
-		"newsNZcn",
-		"vischina",
-		"gushilishi",
-		"cma_photo_dept",
+	config, err := getConf()
+	if err != nil {
+		fmt.Println(err.Error())
+		return
 	}
 
-	for _, account := range accounts {
+	for _, account := range config.Accounts {
 		dealWithOneUrl(client, "https://rsshub.rssforever.com/twitter/user/"+account)
 	}
+}
+
+func getConf() (*Conf, error) {
+	c := Conf{}
+
+	f, err := os.OpenFile("conf.yaml", os.O_RDONLY, 0755)
+	if err != nil {
+		return nil, err
+	}
+	defer f.Close()
+
+	d, err := ioutil.ReadAll(f)
+	if err != nil {
+		return nil, err
+	}
+	err = yaml.Unmarshal(d, &c)
+	if err != nil {
+		return nil, err
+	}
+
+	return &c, nil
 }
 
 func dealWithOneUrl(client *http.Client, url string) {
