@@ -11,6 +11,7 @@ import (
 	"github.com/dsoprea/go-exif/v3/undefined"
 	jpgs "github.com/dsoprea/go-jpeg-image-structure/v2"
 	"github.com/mmcdole/gofeed"
+	log "github.com/sirupsen/logrus"
 	"gopkg.in/yaml.v2"
 	"io/ioutil"
 	"net/http"
@@ -46,7 +47,7 @@ func main() {
 
 	config, err := getConf()
 	if err != nil {
-		fmt.Println(err.Error())
+		log.Error(err.Error())
 		return
 	}
 
@@ -81,10 +82,10 @@ func dealWithOneUrl(client *http.Client, url string) {
 	parser := gofeed.NewParser()
 	feed, err := parser.ParseURL(url)
 	if err != nil {
-		fmt.Println(err)
+		log.Error(err)
 		return
 	}
-	fmt.Printf("[%s], get all feeds cost %dms\n", url, time.Since(s)/time.Millisecond)
+	log.Warnf("[%s], get all feeds cost %dms\n", url, time.Since(s)/time.Millisecond)
 
 	_ = os.MkdirAll("pics", os.ModeDir|0755)
 	_ = os.MkdirAll("libpics", os.ModeDir|0755)
@@ -98,35 +99,35 @@ func dealWithOneUrl(client *http.Client, url string) {
 
 		flag, err := isFileExist(libfilePath)
 		if err != nil {
-			fmt.Println(err)
+			log.Warn(err)
 			return err
 		}
 
 		if flag {
-			fmt.Printf("the file: %s was downloaded.\n", u)
+			log.Warnf("the file: %s was downloaded.", u)
 			return nil
 		}
 
 		start := time.Now()
 		req, err := http.NewRequest(http.MethodGet, u, nil)
 		if err != nil {
-			fmt.Println(err)
+			log.Warn(err)
 			return err
 		}
 		res, err := client.Do(req)
 		if err != nil {
-			fmt.Println(err)
+			log.Error(err)
 			return err
 		}
 
 		if res.StatusCode != 200 {
-			fmt.Println("some err: ", res)
+			log.Warnf("some err: %v", res)
 			return nil
 		}
 
 		pic, err := ioutil.ReadAll(res.Body)
 		if err != nil {
-			fmt.Println(err)
+			log.Warn(err)
 			return err
 		}
 
@@ -135,19 +136,19 @@ func dealWithOneUrl(client *http.Client, url string) {
 			p := jpgs.NewJpegMediaParser()
 			intfc, err := p.ParseBytes(pic)
 			if err != nil {
-				fmt.Println(err)
+				log.Error(err)
 				return err
 			}
 
 			sl := intfc.(*jpgs.SegmentList)
 			rootIb, err := sl.ConstructExifBuilder()
 			if err != nil {
-				fmt.Println(err)
+				log.Error(err)
 				return err
 			}
 			exifIb, err := exif.GetOrCreateIbFromRootIb(rootIb, "IFD/Exif")
 			if err != nil {
-				fmt.Println(err)
+				log.Error(err)
 				return err
 			}
 			uc := exifundefined.Tag9286UserComment{
@@ -156,24 +157,24 @@ func dealWithOneUrl(client *http.Client, url string) {
 			}
 			err = exifIb.SetStandardWithName("UserComment", uc)
 			if err != nil {
-				fmt.Println(err)
+				log.Error(err)
 				return err
 			}
 
 			exifIb, err = exif.GetOrCreateIbFromRootIb(rootIb, "IFD")
 			if err != nil {
-				fmt.Println(err)
+				log.Error(err)
 				return err
 			}
 			err = exifIb.SetStandardWithName("Make", "None")
 			if err != nil {
-				fmt.Println(err)
+				log.Error(err)
 				return err
 			}
 
 			err = sl.SetExif(rootIb)
 			if err != nil {
-				fmt.Println(err)
+				log.Error(err)
 				return err
 			}
 
@@ -185,14 +186,14 @@ func dealWithOneUrl(client *http.Client, url string) {
 		filePath := fmt.Sprintf("pics%c%s%s", os.PathSeparator, fileName, getFileType(pic))
 		f, err := os.OpenFile(filePath, os.O_RDWR|os.O_CREATE, 0755)
 		if err != nil {
-			fmt.Println(err)
+			log.Error(err)
 			return err
 		}
 		w := bufio.NewWriter(f)
 		n, err := w.Write(pic)
 
 		if err != nil || n != len(pic) {
-			fmt.Println(err)
+			log.Error(err)
 			_ = os.Remove(filePath)
 			return err
 		}
@@ -202,12 +203,12 @@ func dealWithOneUrl(client *http.Client, url string) {
 		_ = os.MkdirAll(dir, os.ModeDir|0755)
 		_, err = os.OpenFile(libfilePath, os.O_RDWR|os.O_CREATE, 0755)
 		if err != nil {
-			fmt.Println(err)
+			log.Error(err)
 			_ = os.Remove(filePath)
 			return err
 		}
 
-		fmt.Printf("done one u: %s, file: %s, cost: %dms\n", u, filePath, time.Since(start)/time.Millisecond)
+		log.Warnf("done one u: %s, file: %s, cost: %dms\n", u, filePath, time.Since(start)/time.Millisecond)
 		return nil
 	}
 
@@ -226,7 +227,7 @@ func dealWithOneUrl(client *http.Client, url string) {
 			}
 		}
 	}
-	fmt.Printf("[%s], done one round costs: %dms\n", url, time.Since(s)/time.Millisecond)
+	log.Warnf("[%s], done one round costs: %dms\n", url, time.Since(s)/time.Millisecond)
 }
 
 func isFileExist(filePath string) (bool, error) {
