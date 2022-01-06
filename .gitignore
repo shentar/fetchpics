@@ -1,5 +1,7 @@
-/libpics/
-/pics/
+libpics/
+pics/
 go.sum
 .idea/
 getpic
+pic/
+girls/

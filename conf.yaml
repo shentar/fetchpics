@@ -1,0 +1,13 @@
+accounts:
+  - dir: pic
+    seeds:
+      - "hu_lalalalala"
+      - "seanwei001"
+      - "tongbingxue"
+      - "newsNZcn"
+      - "vischina"
+      - "gushilishi"
+      - "cma_photo_dept"
+  - dir: girls
+    seeds:
+      - "JunZhan12743255"

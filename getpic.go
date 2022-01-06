@@ -195,8 +195,10 @@ func dealWithOneUrl(client *http.Client, url, dir string) {
 			pic = b.Bytes()
 		}
 
-		dataDir := time.Now().Format("2006-01-02")
-		filePath := fmt.Sprintf("%s%c%s%c%s%s", dir, os.PathSeparator, dataDir, os.PathSeparator, fileName, getFileType(pic))
+		dataDir := time.Now().Format("20060102")
+		fileDir := fmt.Sprintf("%s%c%s", dir, os.PathSeparator, dataDir)
+		_ = os.MkdirAll(fileDir, os.ModeDir|0755)
+		filePath := fmt.Sprintf("%s%c%s%s", fileDir, os.PathSeparator, fileName, getFileType(pic))
 		f, err := os.OpenFile(filePath, os.O_RDWR|os.O_CREATE, 0755)
 		if err != nil {
 			log.Error(err)
