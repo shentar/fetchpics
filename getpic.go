@@ -26,8 +26,13 @@ type oneItem struct {
 	desc string
 }
 
+type Account struct {
+	Dir   string   `yaml:"dir"`
+	Seeds []string `yaml:"seeds"`
+}
+
 type Conf struct {
-	Accounts []string `yaml:"accounts"`
+	Accounts []Account `yaml:"accounts"`
 }
 
 func main() {
@@ -56,8 +61,12 @@ func main() {
 		return
 	}
 
+	_ = os.MkdirAll("libpics", os.ModeDir|0755)
 	for _, account := range config.Accounts {
-		dealWithOneUrl(client, "https://rsshub.rssforever.com/twitter/user/"+account)
+		_ = os.MkdirAll(account.Dir, os.ModeDir|0755)
+		for _, seed := range account.Seeds {
+			dealWithOneUrl(client, "https://rsshub.rssforever.com/twitter/user/"+seed, account.Dir)
+		}
 	}
 }
 
@@ -82,7 +91,7 @@ func getConf() (*Conf, error) {
 	return &c, nil
 }
 
-func dealWithOneUrl(client *http.Client, url string) {
+func dealWithOneUrl(client *http.Client, url, dir string) {
 	s := time.Now()
 	parser := gofeed.NewParser()
 	feed, err := parser.ParseURL(url)
@@ -92,15 +101,13 @@ func dealWithOneUrl(client *http.Client, url string) {
 	}
 	log.Warnf("[%s], get all feeds cost %dms\n", url, time.Since(s)/time.Millisecond)
 
-	_ = os.MkdirAll("pics", os.ModeDir|0755)
-	_ = os.MkdirAll("libpics", os.ModeDir|0755)
-
 	getOne := func(item *oneItem) error {
 		u := item.url
 		h := md5.Sum([]byte(u))
 		fileName := hex.EncodeToString(h[:])
-		dir := fmt.Sprintf("libpics%c%s%c%s", os.PathSeparator, fileName[:1], os.PathSeparator, fileName[1:2])
-		libfilePath := fmt.Sprintf("%s%c%s", dir, os.PathSeparator, fileName)
+		hashdir := fmt.Sprintf("libpics%c%s%c%s", os.PathSeparator, fileName[:1], os.PathSeparator, fileName[1:2])
+		_ = os.MkdirAll(hashdir, os.ModeDir|0755)
+		libfilePath := fmt.Sprintf("%s%c%s", hashdir, os.PathSeparator, fileName)
 
 		flag, err := isFileExist(libfilePath)
 		if err != nil {
@@ -188,7 +195,7 @@ func dealWithOneUrl(client *http.Client, url string) {
 			pic = b.Bytes()
 		}
 
-		filePath := fmt.Sprintf("pics%c%s%s", os.PathSeparator, fileName, getFileType(pic))
+		filePath := fmt.Sprintf("%s%c%s%s", dir, os.PathSeparator, fileName, getFileType(pic))
 		f, err := os.OpenFile(filePath, os.O_RDWR|os.O_CREATE, 0755)
 		if err != nil {
 			log.Error(err)
