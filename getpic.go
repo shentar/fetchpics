@@ -18,6 +18,7 @@ import (
 	"net/url"
 	"os"
 	"regexp"
+	"sync"
 	"time"
 )
 
@@ -61,13 +62,22 @@ func main() {
 		return
 	}
 
+	sg := sync.WaitGroup{}
 	_ = os.MkdirAll("libpics", os.ModeDir|0755)
 	for _, account := range config.Accounts {
 		_ = os.MkdirAll(account.Dir, os.ModeDir|0755)
 		for _, seed := range account.Seeds {
-			dealWithOneUrl(client, "https://rsshub.rssforever.com/twitter/user/"+seed, account.Dir)
+			sg.Add(1)
+			s := seed
+			folder := account.Dir
+			go func() {
+				dealWithOneUrl(client, "https://rsshub.rssforever.com/twitter/user/"+s, folder)
+				sg.Done()
+			}()
 		}
 	}
+
+	sg.Wait()
 }
 
 func getConf() (*Conf, error) {
