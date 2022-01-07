@@ -2,7 +2,6 @@ accounts:
   - dir: pic
     seeds:
       - "hu_lalalalala"
-      - "seanwei001"
       - "tongbingxue"
       - "newsNZcn"
       - "vischina"
@@ -16,8 +15,20 @@ accounts:
       - "SFiolitakis"
       - "totalspace360"
       - "1_LoveLiberty"
-      - "BishopBarron"  
+      - "BishopBarron" 
+      - "LucyMay1283" 
+      - "pe8744"
+      - "Futura_Noir" 
+      - "ClioRanko"
+  - dir: his
+      - "seanwei001"    
   - dir: girls
     seeds:
       - "JunZhan12743255"
       - "yua_mikami"
+      - "zhukeer00"
+      - "iwWLx8hbH8D22jb" 
+      - "kat99811me"
+      - "seihukugirl_bot"
+      - "albumsexygirl"
+      - "SuperGeekGirls"  
