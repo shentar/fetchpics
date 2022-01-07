@@ -17,9 +17,15 @@ import (
 	"net/http"
 	"net/url"
 	"os"
+	"path/filepath"
 	"regexp"
+	"runtime"
 	"sync"
 	"time"
+)
+
+const (
+	RSSHUB_URL = "https://rsshub.rssforever.com/twitter/user/"
 )
 
 type oneItem struct {
@@ -32,34 +38,66 @@ type Account struct {
 	Seeds []string `yaml:"seeds"`
 }
 
+type HttpProxy struct {
+	UseProxy bool   `yaml:"use_proxy"`
+	Host     string `yaml:"host"`
+	Port     uint16 `yaml:"port"`
+	Protocol string `yaml:"protocol"`
+	User     string `yaml:"user"`
+	Password string `yaml:"password"`
+}
+
 type Conf struct {
-	Accounts []Account `yaml:"accounts"`
+	Accounts  []Account `yaml:"accounts"`
+	Proxy     HttpProxy `yaml:"http_proxy"`
+	RssHubUrl string    `yaml:"rsshub_url"`
+}
+
+func callerPrettyfierForLogrus(caller *runtime.Frame) (string, string) {
+	fileName := filepath.Base(caller.File)
+	funcName := filepath.Base(caller.Function)
+	return funcName, fmt.Sprintf("%s:%d", fileName, caller.Line)
 }
 
 func main() {
-	customFormatter := new(log.TextFormatter)
+	customFormatter := &log.TextFormatter{CallerPrettyfier: callerPrettyfierForLogrus}
 	customFormatter.TimestampFormat = "2006-01-02 15:04:05"
 	customFormatter.FullTimestamp = true
 	log.SetFormatter(customFormatter)
-
-	var tr = &http.Transport{
-		TLSClientConfig: &tls.Config{InsecureSkipVerify: true},
-	}
-
-	proxyUrl, err := url.Parse("http://22.22.22.14:10080")
-	if err == nil {
-		tr.Proxy = http.ProxyURL(proxyUrl)
-	}
-
-	client := &http.Client{
-		Transport: tr,
-		Timeout:   45 * time.Second,
-	}
+	log.SetReportCaller(true)
 
 	config, err := getConf()
 	if err != nil {
 		log.Error(err.Error())
 		return
+	}
+
+	client := &http.Client{
+		Timeout: 45 * time.Second,
+	}
+
+	if config.Proxy.UseProxy {
+		proxyStr := config.Proxy.Protocol + "://"
+		if config.Proxy.User != "" && config.Proxy.Password != "" {
+			proxyStr += fmt.Sprintf("%s@%s", config.Proxy.User, config.Proxy.Password)
+		}
+		proxyStr += fmt.Sprintf("%s:%d", config.Proxy.Host, config.Proxy.Port)
+		proxyUrl, err := url.Parse(proxyStr)
+		if err == nil {
+			var tr = &http.Transport{
+				TLSClientConfig: &tls.Config{InsecureSkipVerify: true},
+			}
+			tr.Proxy = http.ProxyURL(proxyUrl)
+			client.Transport = tr
+		} else {
+			log.Warnf("the format of http proxy is invalid.")
+			return
+		}
+	}
+
+	rsshubUrl := config.RssHubUrl
+	if rsshubUrl == "" {
+		rsshubUrl = RSSHUB_URL
 	}
 
 	sg := sync.WaitGroup{}
@@ -71,7 +109,7 @@ func main() {
 			s := seed
 			folder := account.Dir
 			go func() {
-				dealWithOneUrl(client, "https://rsshub.rssforever.com/twitter/user/"+s, folder)
+				dealWithOneUrl(client, rsshubUrl, s, folder)
 				sg.Done()
 			}()
 		}
@@ -101,15 +139,16 @@ func getConf() (*Conf, error) {
 	return &c, nil
 }
 
-func dealWithOneUrl(client *http.Client, url, dir string) {
+func dealWithOneUrl(client *http.Client, rsshubUrl, seed, dir string) {
 	s := time.Now()
 	parser := gofeed.NewParser()
-	feed, err := parser.ParseURL(url)
+	feedUrl := rsshubUrl + seed
+	feed, err := parser.ParseURL(feedUrl)
 	if err != nil {
-		log.Error(err)
+		log.Errorf("%s, err: %s", feedUrl, err.Error())
 		return
 	}
-	log.Warnf("[%s], get all feeds cost %dms\n", url, time.Since(s)/time.Millisecond)
+	log.Warnf("[%s], get all feeds cost %dms", feedUrl, time.Since(s)/time.Millisecond)
 
 	getOne := func(item *oneItem) error {
 		u := item.url
@@ -121,12 +160,12 @@ func dealWithOneUrl(client *http.Client, url, dir string) {
 
 		flag, err := isFileExist(libfilePath)
 		if err != nil {
-			log.Warn(err)
+			log.Warnf("%s, err: %s, file: %s", feedUrl, libfilePath, err.Error())
 			return err
 		}
 
 		if flag {
-			log.Warnf("the file: %s was downloaded.", u)
+			log.Warnf("the file: account: %s, u: %s was downloaded.", seed, u)
 			return nil
 		}
 
@@ -233,7 +272,7 @@ func dealWithOneUrl(client *http.Client, url, dir string) {
 			return err
 		}
 
-		log.Warnf("done one u: %s, file: %s, cost: %dms\n", u, filePath, time.Since(start)/time.Millisecond)
+		log.Warnf("done one account: %s, u: %s, file: %s, cost: %dms", seed, u, filePath, time.Since(start)/time.Millisecond)
 		return nil
 	}
 
@@ -247,12 +286,16 @@ func dealWithOneUrl(client *http.Client, url, dir string) {
 
 			for _, j := range ss {
 				if len(j) == 2 {
-					_ = getOne(&oneItem{url: j[1], desc: i.Description})
+					it := &oneItem{url: j[1], desc: i.Description + fmt.Sprintf("@%s", seed)}
+					err = getOne(it)
+					if err != nil {
+						log.Warnf("some error: %s, picUrl: %s, desc: %s", seed, it.url, i.Description)
+					}
 				}
 			}
 		}
 	}
-	log.Warnf("[%s], done one round costs: %dms\n", url, time.Since(s)/time.Millisecond)
+	log.Warnf("[%s], done one round costs: %dms", seed, time.Since(s)/time.Millisecond)
 }
 
 func isFileExist(filePath string) (bool, error) {

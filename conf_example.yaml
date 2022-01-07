@@ -15,20 +15,29 @@ accounts:
       - "SFiolitakis"
       - "totalspace360"
       - "1_LoveLiberty"
-      - "BishopBarron" 
-      - "LucyMay1283" 
+      - "BishopBarron"
+      - "LucyMay1283"
       - "pe8744"
-      - "Futura_Noir" 
-      - "ClioRanko"
+      - "Futura_Noir"
+      - "CiloRanko"
   - dir: his
-      - "seanwei001"    
+      - "seanwei001"
   - dir: girls
     seeds:
       - "JunZhan12743255"
       - "yua_mikami"
       - "zhukeer00"
-      - "iwWLx8hbH8D22jb" 
+      - "iwWLx8hbH8D22jb"
       - "kat99811me"
       - "seihukugirl_bot"
       - "albumsexygirl"
-      - "SuperGeekGirls"  
+      - "SuperGeekGirls"
+
+http_proxy:
+  use_proxy: false
+  host: "22.22.22.14"
+  port: 10080
+  protocol: "http"
+  user:
+  password:
+
