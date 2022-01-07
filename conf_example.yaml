@@ -1,37 +1,10 @@
 accounts:
-  - dir: pic
-    seeds:
-      - "hu_lalalalala"
-      - "tongbingxue"
-      - "newsNZcn"
-      - "vischina"
-      - "gushilishi"
-      - "cma_photo_dept"
-      - "J8Fs8"
-      - "kinshi93"
-      - "OnTheRoad34"
-      - "naturephotos__"
-      - "tarekbahaa1"
-      - "SFiolitakis"
-      - "totalspace360"
-      - "1_LoveLiberty"
-      - "BishopBarron"
-      - "LucyMay1283"
-      - "pe8744"
-      - "Futura_Noir"
-      - "CiloRanko"
   - dir: his
+    seeds:
       - "seanwei001"
   - dir: girls
     seeds:
       - "JunZhan12743255"
-      - "yua_mikami"
-      - "zhukeer00"
-      - "iwWLx8hbH8D22jb"
-      - "kat99811me"
-      - "seihukugirl_bot"
-      - "albumsexygirl"
-      - "SuperGeekGirls"
 
 http_proxy:
   use_proxy: false

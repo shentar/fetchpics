@@ -168,7 +168,7 @@ func dealWithOneUrl(client *http.Client, rsshubUrl, seed, dir string) {
 		}
 
 		if flag {
-			log.Warnf("the file: account: %s, u: %s was downloaded.", seed, u)
+			// log.Warnf("the file: account: %s, u: %s was downloaded.", seed, u)
 			return nil
 		}
 
