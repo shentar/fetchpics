@@ -8,8 +8,11 @@ import (
 	"encoding/hex"
 	"fmt"
 	"github.com/dsoprea/go-exif/v3"
+	exifcommon "github.com/dsoprea/go-exif/v3/common"
 	"github.com/dsoprea/go-exif/v3/undefined"
 	jpgs "github.com/dsoprea/go-jpeg-image-structure/v2"
+	pngs "github.com/dsoprea/go-png-image-structure/v2"
+	"github.com/dsoprea/go-utility/v2/image"
 	"github.com/mmcdole/gofeed"
 	log "github.com/sirupsen/logrus"
 	"gopkg.in/yaml.v2"
@@ -193,8 +196,9 @@ func dealWithOneUrl(client *http.Client, rsshubUrl, seed, dir string) {
 		}
 
 		ft := getFileType(pic)
+		var p riimage.MediaParser
 		if ft == ".jpg" {
-			p := jpgs.NewJpegMediaParser()
+			p = jpgs.NewJpegMediaParser()
 			intfc, err := p.ParseBytes(pic)
 			if err != nil {
 				log.Error(err)
@@ -202,32 +206,8 @@ func dealWithOneUrl(client *http.Client, rsshubUrl, seed, dir string) {
 			}
 
 			sl := intfc.(*jpgs.SegmentList)
-			rootIb, err := sl.ConstructExifBuilder()
-			if err != nil {
-				log.Error(err)
-				return err
-			}
-			exifIb, err := exif.GetOrCreateIbFromRootIb(rootIb, "IFD/Exif")
-			if err != nil {
-				log.Error(err)
-				return err
-			}
-			uc := exifundefined.Tag9286UserComment{
-				EncodingType:  exifundefined.TagUndefinedType_9286_UserComment_Encoding_ASCII,
-				EncodingBytes: []byte(item.desc),
-			}
-			err = exifIb.SetStandardWithName("UserComment", uc)
-			if err != nil {
-				log.Error(err)
-				return err
-			}
-
-			exifIb, err = exif.GetOrCreateIbFromRootIb(rootIb, "IFD")
-			if err != nil {
-				log.Error(err)
-				return err
-			}
-			err = exifIb.SetStandardWithName("Make", "None")
+			rootIb, _ := sl.ConstructExifBuilder()
+			rootIb, err = addExif(item, rootIb)
 			if err != nil {
 				log.Error(err)
 				return err
@@ -241,6 +221,38 @@ func dealWithOneUrl(client *http.Client, rsshubUrl, seed, dir string) {
 
 			b := new(bytes.Buffer)
 			err = sl.Write(b)
+			if err != nil {
+				log.Error(err)
+				return err
+			}
+			pic = b.Bytes()
+		} else {
+			p = pngs.NewPngMediaParser()
+			intfc, err := p.ParseBytes(pic)
+			if err != nil {
+				log.Error(err)
+				return err
+			}
+
+			cl := intfc.(*pngs.ChunkSlice)
+			rootIb, _ := cl.ConstructExifBuilder()
+			rootIb, err = addExif(item, rootIb)
+			if err != nil {
+				log.Error(err)
+				return err
+			}
+
+			err = cl.SetExif(rootIb)
+			if err != nil {
+				log.Error(err)
+				return err
+			}
+			b := new(bytes.Buffer)
+			err = cl.WriteTo(b)
+			if err != nil {
+				log.Error(err)
+				return err
+			}
 			pic = b.Bytes()
 		}
 
@@ -296,6 +308,45 @@ func dealWithOneUrl(client *http.Client, rsshubUrl, seed, dir string) {
 		}
 	}
 	log.Warnf("[%s], done one round costs: %dms", seed, time.Since(s)/time.Millisecond)
+}
+
+func addExif(item *oneItem, rootIb *exif.IfdBuilder) (*exif.IfdBuilder, error) {
+	if rootIb == nil {
+		im, err := exifcommon.NewIfdMappingWithStandard()
+		if err != nil {
+			log.Error(err)
+			return nil, err
+		}
+		ti := exif.NewTagIndex()
+		rootIb = exif.NewIfdBuilder(im, ti, exifcommon.IfdStandardIfdIdentity, exifcommon.EncodeDefaultByteOrder)
+	}
+
+	exifIb, err := exif.GetOrCreateIbFromRootIb(rootIb, "IFD/Exif")
+	if err != nil {
+		log.Error(err)
+		return nil, err
+	}
+	uc := exifundefined.Tag9286UserComment{
+		EncodingType:  exifundefined.TagUndefinedType_9286_UserComment_Encoding_ASCII,
+		EncodingBytes: []byte(item.desc),
+	}
+	err = exifIb.SetStandardWithName("UserComment", uc)
+	if err != nil {
+		log.Error(err)
+		return nil, err
+	}
+
+	exifIb, err = exif.GetOrCreateIbFromRootIb(rootIb, "IFD")
+	if err != nil {
+		log.Error(err)
+		return nil, err
+	}
+	err = exifIb.SetStandardWithName("Make", "None")
+	if err != nil {
+		log.Error(err)
+		return nil, err
+	}
+	return rootIb, nil
 }
 
 func isFileExist(filePath string) (bool, error) {
