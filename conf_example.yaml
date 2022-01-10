@@ -6,6 +6,10 @@ accounts:
     seeds:
       - "JunZhan12743255"
 
+photo_dir: "./abc/"
+
+rsshub_url: "https://rsshub.rssforever.com/twitter/user/"
+
 http_proxy:
   use_proxy: false
   host: "22.22.22.14"

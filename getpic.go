@@ -28,7 +28,8 @@ import (
 )
 
 const (
-	RSSHUB_URL = "https://rsshub.rssforever.com/twitter/user/"
+	RSSHUB_URL  = "https://rsshub.rssforever.com/twitter/user/"
+	DEFAULT_DIR = "."
 )
 
 type oneItem struct {
@@ -54,6 +55,7 @@ type Conf struct {
 	Accounts  []Account `yaml:"accounts"`
 	Proxy     HttpProxy `yaml:"http_proxy"`
 	RssHubUrl string    `yaml:"rsshub_url"`
+	PhotoDir  string    `yaml:"photo_dir"`
 }
 
 func callerPrettyfierForLogrus(caller *runtime.Frame) (string, string) {
@@ -62,6 +64,13 @@ func callerPrettyfierForLogrus(caller *runtime.Frame) (string, string) {
 	return funcName, fmt.Sprintf("%s:%d", fileName, caller.Line)
 }
 
+var (
+	config    *Conf
+	rootDir   string
+	libPicDir string
+	photoDir  string
+)
+
 func main() {
 	customFormatter := &log.TextFormatter{CallerPrettyfier: callerPrettyfierForLogrus}
 	customFormatter.TimestampFormat = "2006-01-02 15:04:05"
@@ -69,11 +78,20 @@ func main() {
 	log.SetFormatter(customFormatter)
 	log.SetReportCaller(true)
 
-	config, err := getConf()
+	var err error
+	config, err = getConf()
 	if err != nil {
 		log.Error(err.Error())
 		return
 	}
+
+	rootDir = config.PhotoDir
+	if rootDir == "" {
+		rootDir = DEFAULT_DIR
+	}
+
+	libPicDir = fmt.Sprintf("%s%c%s", rootDir, os.PathSeparator, "libpics")
+	photoDir = fmt.Sprintf("%s%c%s", rootDir, os.PathSeparator, "pics")
 
 	client := &http.Client{
 		Timeout: 45 * time.Second,
@@ -104,9 +122,7 @@ func main() {
 	}
 
 	sg := sync.WaitGroup{}
-	_ = os.MkdirAll("libpics", os.ModeDir|0755)
 	for _, account := range config.Accounts {
-		_ = os.MkdirAll(account.Dir, os.ModeDir|0755)
 		for _, seed := range account.Seeds {
 			sg.Add(1)
 			s := seed
@@ -157,7 +173,7 @@ func dealWithOneUrl(client *http.Client, rsshubUrl, seed, dir string) {
 		u := item.url
 		h := md5.Sum([]byte(u))
 		fileName := hex.EncodeToString(h[:])
-		hashdir := fmt.Sprintf("libpics%c%s%c%s", os.PathSeparator, fileName[:1], os.PathSeparator, fileName[1:2])
+		hashdir := fmt.Sprintf("%s%c%s%c%s", libPicDir, os.PathSeparator, fileName[:1], os.PathSeparator, fileName[1:2])
 		_ = os.MkdirAll(hashdir, os.ModeDir|0755)
 		libfilePath := fmt.Sprintf("%s%c%s", hashdir, os.PathSeparator, fileName)
 
@@ -256,8 +272,7 @@ func dealWithOneUrl(client *http.Client, rsshubUrl, seed, dir string) {
 			pic = b.Bytes()
 		}
 
-		dataDir := time.Now().Format("20060102")
-		fileDir := fmt.Sprintf("%s%c%s", dir, os.PathSeparator, dataDir)
+		fileDir := fmt.Sprintf("%s%c%s", photoDir, os.PathSeparator, dir)
 		_ = os.MkdirAll(fileDir, os.ModeDir|0755)
 		filePath := fmt.Sprintf("%s%c%s%s", fileDir, os.PathSeparator, seed+"_"+fileName, getFileType(pic))
 		f, err := os.OpenFile(filePath, os.O_RDWR|os.O_CREATE, 0755)
@@ -276,7 +291,6 @@ func dealWithOneUrl(client *http.Client, rsshubUrl, seed, dir string) {
 		_ = w.Flush()
 		_ = f.Close()
 
-		_ = os.MkdirAll(dir, os.ModeDir|0755)
 		_, err = os.OpenFile(libfilePath, os.O_RDWR|os.O_CREATE, 0755)
 		if err != nil {
 			log.Error(err)
