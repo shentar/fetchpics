@@ -28,7 +28,7 @@ import (
 )
 
 const (
-	RSSHUB_URL  = "https://rsshub.rssforever.com/twitter/user/"
+	RSSHUB_URL  = "https://rsshub.rssforever.com/twitter/media/"
 	DEFAULT_DIR = "."
 )
 
