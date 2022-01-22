@@ -71,6 +71,13 @@ var (
 	photoDir  string
 )
 
+type OneUser struct {
+	account   string
+	folder    string
+	rsshubUrl string
+	client    *http.Client
+}
+
 func main() {
 	customFormatter := &log.TextFormatter{CallerPrettyfier: callerPrettyfierForLogrus}
 	customFormatter.TimestampFormat = "2006-01-02 15:04:05"
@@ -122,19 +129,42 @@ func main() {
 	}
 
 	sg := sync.WaitGroup{}
+	ch := make(chan *OneUser, 20)
+	for i := 0; i < 10; i++ {
+		sg.Add(1)
+		go func() {
+			doOneTask(ch)
+			sg.Done()
+		}()
+	}
+
+	c := 0
 	for _, account := range config.Accounts {
+		_ = os.MkdirAll(account.Dir, os.ModeDir|0755)
 		for _, seed := range account.Seeds {
-			sg.Add(1)
-			s := seed
-			folder := account.Dir
-			go func() {
-				dealWithOneUrl(client, rsshubUrl, s, folder)
-				sg.Done()
-			}()
+			o := &OneUser{
+				account:   seed,
+				folder:    account.Dir,
+				rsshubUrl: rsshubUrl,
+				client:    client,
+			}
+
+			ch <- o
+			c++
+			if c%10 == 0 {
+				time.Sleep(time.Second)
+			}
 		}
 	}
 
+	close(ch)
 	sg.Wait()
+}
+
+func doOneTask(ch chan *OneUser) {
+	for o := range ch {
+		dealWithOneUrl(o.client, o.rsshubUrl, o.account, o.folder)
+	}
 }
 
 func getConf() (*Conf, error) {
