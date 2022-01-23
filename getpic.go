@@ -23,6 +23,7 @@ import (
 	"path/filepath"
 	"regexp"
 	"runtime"
+	"strings"
 	"sync"
 	"time"
 )
@@ -140,7 +141,6 @@ func main() {
 
 	c := 0
 	for _, account := range config.Accounts {
-		_ = os.MkdirAll(account.Dir, os.ModeDir|0755)
 		for _, seed := range account.Seeds {
 			o := &OneUser{
 				account:   seed,
@@ -191,6 +191,7 @@ func getConf() (*Conf, error) {
 func dealWithOneUrl(client *http.Client, rsshubUrl, seed, dir string) {
 	s := time.Now()
 	parser := gofeed.NewParser()
+	parser.UserAgent = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/97.0.4692.71 Safari/537.36"
 	feedUrl := rsshubUrl + seed
 	feed, err := parser.ParseURL(feedUrl)
 	if err != nil {
@@ -207,6 +208,7 @@ func dealWithOneUrl(client *http.Client, rsshubUrl, seed, dir string) {
 		_ = os.MkdirAll(hashdir, os.ModeDir|0755)
 		libfilePath := fmt.Sprintf("%s%c%s", hashdir, os.PathSeparator, fileName)
 
+		var err error
 		flag, err := isFileExist(libfilePath)
 		if err != nil {
 			log.Warnf("%s, err: %s, file: %s", feedUrl, libfilePath, err.Error())
@@ -221,16 +223,19 @@ func dealWithOneUrl(client *http.Client, rsshubUrl, seed, dir string) {
 		start := time.Now()
 		req, err := http.NewRequest(http.MethodGet, u, nil)
 		if err != nil {
+			log.Warnf("failed to get pic: %s", u)
 			log.Warn(err)
 			return err
 		}
 		res, err := client.Do(req)
 		if err != nil {
+			log.Warnf("failed to get pic: %s", u)
 			log.Error(err)
 			return err
 		}
 
 		if res.StatusCode != 200 {
+			log.Warnf("failed to get pic: %s", u)
 			log.Warnf("some err: %v", res)
 			return nil
 		}
@@ -334,7 +339,7 @@ func dealWithOneUrl(client *http.Client, rsshubUrl, seed, dir string) {
 
 	if len(feed.Items) > 0 {
 		for _, i := range feed.Items {
-			reg := regexp.MustCompile(`<img style src="(.*?=orig)"+`)
+			reg := regexp.MustCompile(`<img style.*? src="(.*?=orig)"+`)
 			ss := reg.FindAllStringSubmatch(i.Description, -1)
 			if len(ss) == 0 {
 				continue
@@ -342,7 +347,8 @@ func dealWithOneUrl(client *http.Client, rsshubUrl, seed, dir string) {
 
 			for _, j := range ss {
 				if len(j) == 2 {
-					it := &oneItem{url: j[1], desc: i.Description + fmt.Sprintf("@%s", seed)}
+					urlDecoded := strings.Replace(j[1], "&amp;", "&", -1)
+					it := &oneItem{url: urlDecoded, desc: i.Description + fmt.Sprintf("@%s", seed)}
 					err = getOne(it)
 					if err != nil {
 						log.Warnf("some error: %s, picUrl: %s, desc: %s", seed, it.url, i.Description)
