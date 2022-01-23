@@ -29,7 +29,7 @@ import (
 )
 
 const (
-	RSSHUB_URL  = "https://rsshub.rssforever.com/twitter/media/"
+	RSSHUB_URL  = "https://rsshub.rssforever.com/twitter"
 	DEFAULT_DIR = "."
 )
 
@@ -140,19 +140,28 @@ func main() {
 	}
 
 	c := 0
-	for _, account := range config.Accounts {
-		for _, seed := range account.Seeds {
-			o := &OneUser{
-				account:   seed,
-				folder:    account.Dir,
-				rsshubUrl: rsshubUrl,
-				client:    client,
-			}
+	for _, t := range []string{"media", "user"} {
+		for _, account := range config.Accounts {
+			for _, seed := range account.Seeds {
+				o := &OneUser{
+					account:   seed,
+					folder:    account.Dir,
+					rsshubUrl: fmt.Sprintf("%s/%s/", rsshubUrl, t),
+					client:    client,
+				}
 
-			ch <- o
-			c++
-			if c%10 == 0 {
-				time.Sleep(time.Second)
+				ch <- o
+				o = &OneUser{
+					account:   seed,
+					folder:    account.Dir,
+					rsshubUrl: rsshubUrl,
+					client:    client,
+				}
+
+				c += 2
+				if c%10 == 0 {
+					time.Sleep(time.Second)
+				}
 			}
 		}
 	}
