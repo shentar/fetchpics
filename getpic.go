@@ -130,8 +130,8 @@ func main() {
 	}
 
 	sg := sync.WaitGroup{}
-	ch := make(chan *OneUser, 20)
-	for i := 0; i < 10; i++ {
+	ch := make(chan *OneUser, 40)
+	for i := 0; i < 20; i++ {
 		sg.Add(1)
 		go func() {
 			doOneTask(ch)
@@ -159,7 +159,7 @@ func main() {
 				}
 
 				c += 2
-				if c%10 == 0 {
+				if c%20 == 0 {
 					time.Sleep(time.Second)
 				}
 			}
