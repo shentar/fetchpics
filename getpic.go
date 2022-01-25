@@ -70,6 +70,7 @@ var (
 	rootDir   string
 	libPicDir string
 	photoDir  string
+	dateStr   string
 )
 
 type OneUser struct {
@@ -85,7 +86,7 @@ func main() {
 	customFormatter.FullTimestamp = true
 	log.SetFormatter(customFormatter)
 	log.SetReportCaller(true)
-
+	dateStr = time.Now().Format("20060102")
 	var err error
 	config, err = getConf()
 	if err != nil {
@@ -145,7 +146,7 @@ func main() {
 			for _, seed := range account.Seeds {
 				o := &OneUser{
 					account:   seed,
-					folder:    account.Dir,
+					folder:    fmt.Sprintf("%s%c%s", account.Dir, os.PathSeparator, dateStr),
 					rsshubUrl: fmt.Sprintf("%s/%s/", rsshubUrl, t),
 					client:    client,
 				}
