@@ -15,7 +15,7 @@ import (
 	"github.com/dsoprea/go-utility/v2/image"
 	"github.com/mmcdole/gofeed"
 	log "github.com/sirupsen/logrus"
-	"gopkg.in/yaml.v2"
+	"gopkg.in/yaml.v3"
 	"io/ioutil"
 	"net/http"
 	"net/url"
@@ -23,6 +23,7 @@ import (
 	"path/filepath"
 	"regexp"
 	"runtime"
+	"sort"
 	"strings"
 	"sync"
 	"time"
@@ -81,6 +82,15 @@ type OneUser struct {
 }
 
 func main() {
+	if len(os.Args) == 3 && os.Args[1] == "format" {
+		err := formatConf(os.Args[2])
+		if err != nil {
+			fmt.Println(err.Error())
+		}
+
+		return
+	}
+
 	customFormatter := &log.TextFormatter{CallerPrettyfier: callerPrettyfierForLogrus}
 	customFormatter.TimestampFormat = "2006-01-02 15:04:05"
 	customFormatter.FullTimestamp = true
@@ -88,7 +98,7 @@ func main() {
 	log.SetReportCaller(true)
 	dateStr = time.Now().Format("20060102")
 	var err error
-	config, err = getConf()
+	config, err = getConf("conf.yaml")
 	if err != nil {
 		log.Error(err.Error())
 		return
@@ -177,10 +187,51 @@ func doOneTask(ch chan *OneUser) {
 	}
 }
 
-func getConf() (*Conf, error) {
+func formatConf(fPath string) error {
+	c, err := getConf(fPath)
+	if err != nil {
+		return err
+	}
+
+	for _, a := range c.Accounts {
+		sort.Slice(a.Seeds, func(i, j int) bool {
+			return a.Seeds[i] < a.Seeds[j]
+		})
+	}
+
+	o, err := yaml.Marshal(c)
+	if err != nil {
+		return err
+	}
+
+	fmt.Println(string(o))
+
+	f, err := os.OpenFile(fPath+".tmp", os.O_WRONLY|os.O_CREATE, 0755)
+	if err != nil {
+		return err
+	}
+	defer f.Close()
+
+	fe := yaml.NewEncoder(f)
+	fe.SetIndent(2)
+	err = fe.Encode(c)
+	if err != nil {
+		return err
+	}
+	_ = fe.Close()
+
+	err = os.Rename(fPath+".tmp", fPath)
+	if err != nil {
+		return err
+	}
+
+	return nil
+}
+
+func getConf(fPath string) (*Conf, error) {
 	c := Conf{}
 
-	f, err := os.OpenFile("conf.yaml", os.O_RDONLY, 0755)
+	f, err := os.OpenFile(fPath, os.O_RDONLY, 0755)
 	if err != nil {
 		return nil, err
 	}
