@@ -31,7 +31,7 @@ import (
 
 const (
 	RssHubTwitterUrl   = "https://rsshub.rssforever.com/twitter"
-	RssHubTelegramUrl  = "https://rsshub.app/telegram/channel"
+	RssHubTelegramUrl  = "https://rsshub.rssforever.com/telegram/channel"
 	DefaultDir         = "."
 	TelegramChannelRss = "telegramchannel"
 )
