@@ -1,10 +1,14 @@
 accounts:
   - dir: his
     seeds:
-      - "seanwei001"
+      - seanwei001
   - dir: girls
     seeds:
-      - "JunZhan12743255"
+      - JunZhan12743255
+  - dir: girls
+    type: telegramchannel
+    seeds:
+      - tupian8
 
 photo_dir: "./abc/"
 

@@ -30,8 +30,10 @@ import (
 )
 
 const (
-	RSSHUB_URL  = "https://rsshub.rssforever.com/twitter"
-	DEFAULT_DIR = "."
+	RssHubTwitterUrl   = "https://rsshub.rssforever.com/twitter"
+	RssHubTelegramUrl  = "https://rsshub.app/telegram/channel"
+	DefaultDir         = "."
+	TelegramChannelRss = "telegramchannel"
 )
 
 type oneItem struct {
@@ -42,6 +44,7 @@ type oneItem struct {
 type Account struct {
 	Dir   string   `yaml:"dir"`
 	Seeds []string `yaml:"seeds"`
+	Type  string   `yaml:"type"`
 }
 
 type HttpProxy struct {
@@ -74,10 +77,53 @@ var (
 	dateStr   string
 )
 
+type parser func(string, string) []*oneItem
+
+func parseOneTwitterItem(des, seed string) []*oneItem {
+	reg := regexp.MustCompile(`<img style.*? src="(.*?=orig)"+`)
+	ss := reg.FindAllStringSubmatch(des, -1)
+	if len(ss) == 0 {
+		return nil
+	}
+
+	var items []*oneItem
+	for _, j := range ss {
+		if len(j) == 2 {
+			urlDecoded := strings.Replace(j[1], "&amp;", "&", -1)
+			it := &oneItem{url: urlDecoded, desc: des + fmt.Sprintf("@%s", seed)}
+
+			items = append(items, it)
+		}
+	}
+
+	return items
+}
+
+func parseOneTelegramItem(des, seed string) []*oneItem {
+	reg := regexp.MustCompile(`<img src="(.*?\.(jpg|png))" referrerpolicy="no-referrer">+`)
+	ss := reg.FindAllStringSubmatch(des, -1)
+	if len(ss) == 0 {
+		return nil
+	}
+
+	var items []*oneItem
+	for _, j := range ss {
+		if len(j) == 3 {
+			urlDecoded := strings.Replace(j[1], "&amp;", "&", -1)
+			it := &oneItem{url: urlDecoded, desc: des + fmt.Sprintf("@%s", seed)}
+
+			items = append(items, it)
+		}
+	}
+
+	return items
+}
+
 type OneUser struct {
 	account   string
 	folder    string
 	rsshubUrl string
+	parser    parser
 	client    *http.Client
 }
 
@@ -106,7 +152,7 @@ func main() {
 
 	rootDir = config.PhotoDir
 	if rootDir == "" {
-		rootDir = DEFAULT_DIR
+		rootDir = DefaultDir
 	}
 
 	libPicDir = fmt.Sprintf("%s%c%s", rootDir, os.PathSeparator, "libpics")
@@ -135,11 +181,6 @@ func main() {
 		}
 	}
 
-	rsshubUrl := config.RssHubUrl
-	if rsshubUrl == "" {
-		rsshubUrl = RSSHUB_URL
-	}
-
 	sg := sync.WaitGroup{}
 	ch := make(chan *OneUser, 40)
 	for i := 0; i < 20; i++ {
@@ -151,27 +192,31 @@ func main() {
 	}
 
 	c := 0
-	for _, t := range []string{"media", "user"} {
-		for _, account := range config.Accounts {
-			for _, seed := range account.Seeds {
+	for _, account := range config.Accounts {
+		for _, seed := range account.Seeds {
+			if account.Type == TelegramChannelRss {
 				o := &OneUser{
 					account:   seed,
 					folder:    fmt.Sprintf("%s%c%s", account.Dir, os.PathSeparator, dateStr),
-					rsshubUrl: fmt.Sprintf("%s/%s/", rsshubUrl, t),
+					rsshubUrl: fmt.Sprintf("%s/", RssHubTelegramUrl),
+					parser:    parseOneTelegramItem,
 					client:    client,
 				}
-
 				ch <- o
-				o = &OneUser{
-					account:   seed,
-					folder:    account.Dir,
-					rsshubUrl: rsshubUrl,
-					client:    client,
-				}
-
-				c += 2
-				if c%20 == 0 {
-					time.Sleep(time.Second)
+				c++
+				checkAndSleep(c)
+			} else {
+				for _, t := range []string{"media", "user"} {
+					o := &OneUser{
+						account:   seed,
+						folder:    fmt.Sprintf("%s%c%s", account.Dir, os.PathSeparator, dateStr),
+						rsshubUrl: fmt.Sprintf("%s/%s/", RssHubTwitterUrl, t),
+						parser:    parseOneTwitterItem,
+						client:    client,
+					}
+					ch <- o
+					c++
+					checkAndSleep(c)
 				}
 			}
 		}
@@ -181,9 +226,15 @@ func main() {
 	sg.Wait()
 }
 
+func checkAndSleep(c int) {
+	if c%20 == 0 {
+		time.Sleep(time.Second)
+	}
+}
+
 func doOneTask(ch chan *OneUser) {
 	for o := range ch {
-		dealWithOneUrl(o.client, o.rsshubUrl, o.account, o.folder)
+		dealWithOneUrl(o)
 	}
 }
 
@@ -249,7 +300,11 @@ func getConf(fPath string) (*Conf, error) {
 	return &c, nil
 }
 
-func dealWithOneUrl(client *http.Client, rsshubUrl, seed, dir string) {
+func dealWithOneUrl(user *OneUser) {
+	var (
+		client               = user.client
+		rsshubUrl, seed, dir = user.rsshubUrl, user.account, user.folder
+	)
 	s := time.Now()
 	parser := gofeed.NewParser()
 	parser.UserAgent = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/97.0.4692.71 Safari/537.36"
@@ -400,24 +455,19 @@ func dealWithOneUrl(client *http.Client, rsshubUrl, seed, dir string) {
 
 	if len(feed.Items) > 0 {
 		for _, i := range feed.Items {
-			reg := regexp.MustCompile(`<img style.*? src="(.*?=orig)"+`)
-			ss := reg.FindAllStringSubmatch(i.Description, -1)
-			if len(ss) == 0 {
+			items := user.parser(i.Description, seed)
+			if len(items) == 0 {
 				continue
 			}
-
-			for _, j := range ss {
-				if len(j) == 2 {
-					urlDecoded := strings.Replace(j[1], "&amp;", "&", -1)
-					it := &oneItem{url: urlDecoded, desc: i.Description + fmt.Sprintf("@%s", seed)}
-					err = getOne(it)
-					if err != nil {
-						log.Warnf("some error: %s, picUrl: %s, desc: %s", seed, it.url, i.Description)
-					}
+			for _, j := range items {
+				err = getOne(j)
+				if err != nil {
+					log.Warnf("some error: %s, picUrl: %s, desc: %s", seed, j.url, i.Description)
 				}
 			}
 		}
 	}
+
 	log.Warnf("[%s], done one round costs: %dms", seed, time.Since(s)/time.Millisecond)
 }
 
