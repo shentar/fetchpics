@@ -3,9 +3,11 @@ accounts:
     seeds:
       - seanwei001
   - dir: girls
+    no_desc: true
     seeds:
       - JunZhan12743255
   - dir: girls
+    no_desc: true
     type: telegramchannel
     seeds:
       - tupian8

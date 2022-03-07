@@ -42,9 +42,10 @@ type oneItem struct {
 }
 
 type Account struct {
-	Dir   string   `yaml:"dir"`
-	Seeds []string `yaml:"seeds"`
-	Type  string   `yaml:"type"`
+	Dir    string   `yaml:"dir"`
+	Seeds  []string `yaml:"seeds"`
+	Type   string   `yaml:"type"`
+	NoDesc bool     `yaml:"no_desc"`
 }
 
 type HttpProxy struct {
@@ -124,6 +125,7 @@ type OneUser struct {
 	folder    string
 	rsshubUrl string
 	parser    parser
+	noDesc    bool
 	client    *http.Client
 }
 
@@ -201,6 +203,7 @@ func main() {
 					rsshubUrl: fmt.Sprintf("%s/", RssHubTelegramUrl),
 					parser:    parseOneTelegramItem,
 					client:    client,
+					noDesc:    account.NoDesc,
 				}
 				ch <- o
 				c++
@@ -213,6 +216,7 @@ func main() {
 						rsshubUrl: fmt.Sprintf("%s/%s/", RssHubTwitterUrl, t),
 						parser:    parseOneTwitterItem,
 						client:    client,
+						noDesc:    account.NoDesc,
 					}
 					ch <- o
 					c++
@@ -363,65 +367,9 @@ func dealWithOneUrl(user *OneUser) {
 			return err
 		}
 
-		ft := getFileType(pic)
-		var p riimage.MediaParser
-		if ft == ".jpg" {
-			p = jpgs.NewJpegMediaParser()
-			intfc, err := p.ParseBytes(pic)
-			if err != nil {
-				log.Error(err)
-				return err
-			}
-
-			sl := intfc.(*jpgs.SegmentList)
-			rootIb, _ := sl.ConstructExifBuilder()
-			rootIb, err = addExif(item, rootIb)
-			if err != nil {
-				log.Error(err)
-				return err
-			}
-
-			err = sl.SetExif(rootIb)
-			if err != nil {
-				log.Error(err)
-				return err
-			}
-
-			b := new(bytes.Buffer)
-			err = sl.Write(b)
-			if err != nil {
-				log.Error(err)
-				return err
-			}
-			pic = b.Bytes()
-		} else {
-			p = pngs.NewPngMediaParser()
-			intfc, err := p.ParseBytes(pic)
-			if err != nil {
-				log.Error(err)
-				return err
-			}
-
-			cl := intfc.(*pngs.ChunkSlice)
-			rootIb, _ := cl.ConstructExifBuilder()
-			rootIb, err = addExif(item, rootIb)
-			if err != nil {
-				log.Error(err)
-				return err
-			}
-
-			err = cl.SetExif(rootIb)
-			if err != nil {
-				log.Error(err)
-				return err
-			}
-			b := new(bytes.Buffer)
-			err = cl.WriteTo(b)
-			if err != nil {
-				log.Error(err)
-				return err
-			}
-			pic = b.Bytes()
+		pic, err = addDesc(item, user, pic)
+		if err != nil {
+			return err
 		}
 
 		fileDir := fmt.Sprintf("%s%c%s", photoDir, os.PathSeparator, dir)
@@ -470,6 +418,74 @@ func dealWithOneUrl(user *OneUser) {
 	}
 
 	log.Warnf("[%s], done one round costs: %dms", seed, time.Since(s)/time.Millisecond)
+}
+
+func addDesc(item *oneItem, user *OneUser, pic []byte) ([]byte, error) {
+	if user.noDesc {
+		return pic, nil
+	}
+
+	ft := getFileType(pic)
+	var p riimage.MediaParser
+	if ft == ".jpg" {
+		p = jpgs.NewJpegMediaParser()
+		intfc, err := p.ParseBytes(pic)
+		if err != nil {
+			log.Error(err)
+			return nil, err
+		}
+
+		sl := intfc.(*jpgs.SegmentList)
+		rootIb, _ := sl.ConstructExifBuilder()
+		rootIb, err = addExif(item, rootIb)
+		if err != nil {
+			log.Error(err)
+			return nil, err
+		}
+
+		err = sl.SetExif(rootIb)
+		if err != nil {
+			log.Error(err)
+			return nil, err
+		}
+
+		b := new(bytes.Buffer)
+		err = sl.Write(b)
+		if err != nil {
+			log.Error(err)
+			return nil, err
+		}
+		pic = b.Bytes()
+	} else {
+		p = pngs.NewPngMediaParser()
+		intfc, err := p.ParseBytes(pic)
+		if err != nil {
+			log.Error(err)
+			return nil, err
+		}
+
+		cl := intfc.(*pngs.ChunkSlice)
+		rootIb, _ := cl.ConstructExifBuilder()
+		rootIb, err = addExif(item, rootIb)
+		if err != nil {
+			log.Error(err)
+			return nil, err
+		}
+
+		err = cl.SetExif(rootIb)
+		if err != nil {
+			log.Error(err)
+			return nil, err
+		}
+		b := new(bytes.Buffer)
+		err = cl.WriteTo(b)
+		if err != nil {
+			log.Error(err)
+			return nil, err
+		}
+		pic = b.Bytes()
+	}
+	return pic, nil
 }
 
 func addExif(item *oneItem, rootIb *exif.IfdBuilder) (*exif.IfdBuilder, error) {
