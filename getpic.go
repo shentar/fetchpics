@@ -39,6 +39,7 @@ const (
 type oneItem struct {
 	url  string
 	desc string
+	guid string
 }
 
 type Account struct {
@@ -64,7 +65,7 @@ type Conf struct {
 	PhotoDir  string    `yaml:"photo_dir"`
 }
 
-func callerPrettyfierForLogrus(caller *runtime.Frame) (string, string) {
+func callerPrettyFieldForLogrus(caller *runtime.Frame) (string, string) {
 	fileName := filepath.Base(caller.File)
 	funcName := filepath.Base(caller.Function)
 	return funcName, fmt.Sprintf("%s:%d", fileName, caller.Line)
@@ -127,6 +128,7 @@ type OneUser struct {
 	parser    parser
 	noDesc    bool
 	client    *http.Client
+	aType     string
 }
 
 func main() {
@@ -139,7 +141,7 @@ func main() {
 		return
 	}
 
-	customFormatter := &log.TextFormatter{CallerPrettyfier: callerPrettyfierForLogrus}
+	customFormatter := &log.TextFormatter{CallerPrettyfier: callerPrettyFieldForLogrus}
 	customFormatter.TimestampFormat = "2006-01-02 15:04:05"
 	customFormatter.FullTimestamp = true
 	log.SetFormatter(customFormatter)
@@ -204,6 +206,7 @@ func main() {
 					parser:    parseOneTelegramItem,
 					client:    client,
 					noDesc:    account.NoDesc,
+					aType:     account.Type,
 				}
 				ch <- o
 				c++
@@ -217,6 +220,7 @@ func main() {
 						parser:    parseOneTwitterItem,
 						client:    client,
 						noDesc:    account.NoDesc,
+						aType:     account.Type,
 					}
 					ch <- o
 					c++
@@ -323,7 +327,11 @@ func dealWithOneUrl(user *OneUser) {
 
 	getOne := func(item *oneItem) error {
 		u := item.url
-		h := md5.Sum([]byte(u))
+		guid := item.guid
+		if guid == "" {
+			guid = u
+		}
+		h := md5.Sum([]byte(guid))
 		fileName := hex.EncodeToString(h[:])
 		hashdir := fmt.Sprintf("%s%c%s%c%s", libPicDir, os.PathSeparator, fileName[:1], os.PathSeparator, fileName[1:2])
 		_ = os.MkdirAll(hashdir, os.ModeDir|0755)
@@ -408,7 +416,10 @@ func dealWithOneUrl(user *OneUser) {
 			if len(items) == 0 {
 				continue
 			}
-			for _, j := range items {
+			for sn, j := range items {
+				if user.aType == TelegramChannelRss {
+					j.guid = fmt.Sprintf("%s-%d", i.GUID, sn)
+				}
 				err = getOne(j)
 				if err != nil {
 					log.Warnf("some error: %s, picUrl: %s, desc: %s", seed, j.url, i.Description)
