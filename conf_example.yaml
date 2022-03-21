@@ -11,7 +11,10 @@ accounts:
     type: telegramchannel
     seeds:
       - tupian8
-
+  - dir: wiki
+    seeds:
+      - wiki
+    type: wikidailyphotorss
 photo_dir: "./abc/"
 
 rsshub_url: "https://rsshub.rssforever.com/twitter/user/"

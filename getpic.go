@@ -34,6 +34,7 @@ const (
 	RssHubTelegramUrl  = "https://rsshub.rssforever.com/telegram/channel"
 	DefaultDir         = "."
 	TelegramChannelRss = "telegramchannel"
+	WikiDailyPhotoRSS  = "wikidailyphotorss"
 )
 
 type oneItem struct {
@@ -121,6 +122,26 @@ func parseOneTelegramItem(des, seed string) []*oneItem {
 	return items
 }
 
+func parseOneWikiPhoto(des, seed string) []*oneItem {
+	reg := regexp.MustCompile(`.*<img.*?src="(\/\/.*?.jpg)\/+`)
+	ss := reg.FindAllStringSubmatch(des, -1)
+	if len(ss) == 0 {
+		return nil
+	}
+
+	var items []*oneItem
+	for _, j := range ss {
+		if len(j) == 2 {
+			urlDecoded := strings.Replace(j[1], "&amp;", "&", -1)
+			urlDecoded = strings.Replace(urlDecoded, "/thumb/", "/", -1)
+			it := &oneItem{url: "https:" + urlDecoded, desc: des}
+			items = append(items, it)
+		}
+	}
+
+	return items
+}
+
 type OneUser struct {
 	account   string
 	folder    string
@@ -163,7 +184,7 @@ func main() {
 	photoDir = fmt.Sprintf("%s%c%s", rootDir, os.PathSeparator, "pics")
 
 	client := &http.Client{
-		Timeout: 45 * time.Second,
+		Timeout: 900 * time.Second,
 	}
 
 	if config.Proxy.UseProxy {
@@ -198,8 +219,9 @@ func main() {
 	c := 0
 	for _, account := range config.Accounts {
 		for _, seed := range account.Seeds {
+			var o *OneUser
 			if account.Type == TelegramChannelRss {
-				o := &OneUser{
+				o = &OneUser{
 					account:   seed,
 					folder:    fmt.Sprintf("%s%c%s", account.Dir, os.PathSeparator, dateStr),
 					rsshubUrl: fmt.Sprintf("%s/", RssHubTelegramUrl),
@@ -211,9 +233,20 @@ func main() {
 				ch <- o
 				c++
 				checkAndSleep(c)
+			} else if account.Type == WikiDailyPhotoRSS {
+				o = &OneUser{
+					folder:    fmt.Sprintf("%s%c%s", account.Dir, os.PathSeparator, dateStr),
+					rsshubUrl: "https://zh.wikipedia.org/w/api.php?action=featuredfeed&feed=potd&feedformat=atom",
+					parser:    parseOneWikiPhoto,
+					client:    client,
+					noDesc:    account.NoDesc,
+					aType:     account.Type}
+				ch <- o
+				c++
+				checkAndSleep(c)
 			} else {
 				for _, t := range []string{"media", "user"} {
-					o := &OneUser{
+					o = &OneUser{
 						account:   seed,
 						folder:    fmt.Sprintf("%s%c%s", account.Dir, os.PathSeparator, dateStr),
 						rsshubUrl: fmt.Sprintf("%s/%s/", RssHubTwitterUrl, t),
@@ -269,7 +302,9 @@ func formatConf(fPath string) error {
 	if err != nil {
 		return err
 	}
-	defer f.Close()
+	defer func(f *os.File) {
+		_ = f.Close()
+	}(f)
 
 	fe := yaml.NewEncoder(f)
 	fe.SetIndent(2)
@@ -294,7 +329,9 @@ func getConf(fPath string) (*Conf, error) {
 	if err != nil {
 		return nil, err
 	}
-	defer f.Close()
+	defer func(f *os.File) {
+		_ = f.Close()
+	}(f)
 
 	d, err := ioutil.ReadAll(f)
 	if err != nil {
@@ -314,11 +351,13 @@ func dealWithOneUrl(user *OneUser) {
 		rsshubUrl, seed, dir = user.rsshubUrl, user.account, user.folder
 	)
 	s := time.Now()
-	parser := gofeed.NewParser()
-	//parser.Client = user.client
-	parser.UserAgent = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/97.0.4692.71 Safari/537.36"
+	p := gofeed.NewParser()
+	if user.aType == WikiDailyPhotoRSS {
+		p.Client = user.client
+	}
+	p.UserAgent = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/97.0.4692.71 Safari/537.36"
 	feedUrl := rsshubUrl + seed
-	feed, err := parser.ParseURL(feedUrl)
+	feed, err := p.ParseURL(feedUrl)
 	if err != nil {
 		log.Errorf("%s, err: %s", feedUrl, err.Error())
 		return

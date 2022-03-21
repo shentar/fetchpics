@@ -2,7 +2,7 @@
 
 cmd="${1}"
 DIR="$(cd "$(dirname "$0")" && pwd)"
-cd "${DIR}"
+cd "${DIR}" || exit
 sf=$(basename $0)
 servicename=getpics
 pidfile="/var/run/${servicename}-run.pid"
@@ -15,6 +15,7 @@ usage() {
 
 running() {
     [ -z "${pid}" ] && return 1
+    # shellcheck disable=SC2091
     $(kill -0 "${pid}" 2>/dev/null)
 }
 
@@ -39,6 +40,7 @@ stopnow() {
     running
     if [ $? -eq 0 ]; then
         kill -9 ${pid}
+        # shellcheck disable=SC2091
         $(rm -f "${pidfile}" >/dev/null 2>&1)
         echo "stopped: ${servicename}"
     else
