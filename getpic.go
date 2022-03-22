@@ -35,6 +35,7 @@ const (
 	DefaultDir         = "."
 	TelegramChannelRss = "telegramchannel"
 	WikiDailyPhotoRSS  = "wikidailyphotorss"
+	DailyArt           = "dailyart"
 )
 
 type oneItem struct {
@@ -80,9 +81,10 @@ var (
 	dateStr   string
 )
 
-type parser func(string, string) []*oneItem
+type parser func(item *gofeed.Item, seed string) []*oneItem
 
-func parseOneTwitterItem(des, seed string) []*oneItem {
+func parseOneTwitterItem(item *gofeed.Item, seed string) []*oneItem {
+	des := item.Description
 	reg := regexp.MustCompile(`<img style.*? src="(.*?=orig)"+`)
 	ss := reg.FindAllStringSubmatch(des, -1)
 	if len(ss) == 0 {
@@ -102,7 +104,8 @@ func parseOneTwitterItem(des, seed string) []*oneItem {
 	return items
 }
 
-func parseOneTelegramItem(des, seed string) []*oneItem {
+func parseOneTelegramItem(item *gofeed.Item, seed string) []*oneItem {
+	des := item.Description
 	reg := regexp.MustCompile(`<img src="(.*?\.(jpg|png))" referrerpolicy="no-referrer">+`)
 	ss := reg.FindAllStringSubmatch(des, -1)
 	if len(ss) == 0 {
@@ -122,7 +125,8 @@ func parseOneTelegramItem(des, seed string) []*oneItem {
 	return items
 }
 
-func parseOneWikiPhoto(des, seed string) []*oneItem {
+func parseOneWikiPhoto(item *gofeed.Item, seed string) []*oneItem {
+	des := item.Description
 	reg := regexp.MustCompile(`.*<img.*?src="(\/\/.*?.jpg)\/+`)
 	ss := reg.FindAllStringSubmatch(des, -1)
 	if len(ss) == 0 {
@@ -140,6 +144,14 @@ func parseOneWikiPhoto(des, seed string) []*oneItem {
 	}
 
 	return items
+}
+
+func parseDailyArt(item *gofeed.Item, seed string) []*oneItem {
+	guid := item.GUID
+	urlDecoded := strings.Replace(guid, "&amp;", "&", -1)
+	it := &oneItem{url: urlDecoded, desc: item.Description + fmt.Sprintf("@%s", seed)}
+
+	return []*oneItem{it}
 }
 
 type OneUser struct {
@@ -224,7 +236,7 @@ func main() {
 				o = &OneUser{
 					account:   seed,
 					folder:    fmt.Sprintf("%s%c%s", account.Dir, os.PathSeparator, dateStr),
-					rsshubUrl: fmt.Sprintf("%s/", RssHubTelegramUrl),
+					rsshubUrl: fmt.Sprintf("%s/%s", RssHubTelegramUrl, seed),
 					parser:    parseOneTelegramItem,
 					client:    client,
 					noDesc:    account.NoDesc,
@@ -235,12 +247,27 @@ func main() {
 				checkAndSleep(c)
 			} else if account.Type == WikiDailyPhotoRSS {
 				o = &OneUser{
-					folder:    fmt.Sprintf("%s%c%s", account.Dir, os.PathSeparator, dateStr),
+					account:   seed,
+					folder:    account.Dir,
 					rsshubUrl: "https://zh.wikipedia.org/w/api.php?action=featuredfeed&feed=potd&feedformat=atom",
 					parser:    parseOneWikiPhoto,
 					client:    client,
 					noDesc:    account.NoDesc,
-					aType:     account.Type}
+					aType:     account.Type,
+				}
+				ch <- o
+				c++
+				checkAndSleep(c)
+			} else if account.Type == DailyArt {
+				o = &OneUser{
+					account:   seed,
+					folder:    account.Dir,
+					rsshubUrl: "https://rsshub.rssforever.com/dailyart/zh",
+					parser:    parseDailyArt,
+					client:    client,
+					noDesc:    account.NoDesc,
+					aType:     account.Type,
+				}
 				ch <- o
 				c++
 				checkAndSleep(c)
@@ -249,7 +276,7 @@ func main() {
 					o = &OneUser{
 						account:   seed,
 						folder:    fmt.Sprintf("%s%c%s", account.Dir, os.PathSeparator, dateStr),
-						rsshubUrl: fmt.Sprintf("%s/%s/", RssHubTwitterUrl, t),
+						rsshubUrl: fmt.Sprintf("%s/%s/%s", RssHubTwitterUrl, t, seed),
 						parser:    parseOneTwitterItem,
 						client:    client,
 						noDesc:    account.NoDesc,
@@ -347,8 +374,8 @@ func getConf(fPath string) (*Conf, error) {
 
 func dealWithOneUrl(user *OneUser) {
 	var (
-		client               = user.client
-		rsshubUrl, seed, dir = user.rsshubUrl, user.account, user.folder
+		client             = user.client
+		feedUrl, seed, dir = user.rsshubUrl, user.account, user.folder
 	)
 	s := time.Now()
 	p := gofeed.NewParser()
@@ -356,7 +383,6 @@ func dealWithOneUrl(user *OneUser) {
 		p.Client = user.client
 	}
 	p.UserAgent = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/97.0.4692.71 Safari/537.36"
-	feedUrl := rsshubUrl + seed
 	feed, err := p.ParseURL(feedUrl)
 	if err != nil {
 		log.Errorf("%s, err: %s", feedUrl, err.Error())
@@ -451,7 +477,7 @@ func dealWithOneUrl(user *OneUser) {
 
 	if len(feed.Items) > 0 {
 		for _, i := range feed.Items {
-			items := user.parser(i.Description, seed)
+			items := user.parser(i, seed)
 			if len(items) == 0 {
 				continue
 			}
