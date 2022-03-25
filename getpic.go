@@ -38,6 +38,7 @@ const (
 	DailyArt           = "dailyart"
 	MMFan              = "mmfan"
 	CNU                = "cnu"
+	WallPaper          = "wallpaper"
 )
 
 type oneItem struct {
@@ -129,7 +130,7 @@ func parseOneTelegramItem(item *gofeed.Item, seed string) []*oneItem {
 
 func parseOneWikiPhoto(item *gofeed.Item, seed string) []*oneItem {
 	des := item.Description
-	reg := regexp.MustCompile(`.*<img.*?src="(\/\/.*?.jpg)\/+`)
+	reg := regexp.MustCompile(`.*<img.*?src="(//.*?.jpg)/+`)
 	ss := reg.FindAllStringSubmatch(des, -1)
 	if len(ss) == 0 {
 		return nil
@@ -148,27 +149,7 @@ func parseOneWikiPhoto(item *gofeed.Item, seed string) []*oneItem {
 	return items
 }
 
-func parseMMFanPhoto(item *gofeed.Item, seed string) []*oneItem {
-	des := item.Description
-	reg := regexp.MustCompile(`.*?<img src="(https://.*?.jpg)".*?>+`)
-	ss := reg.FindAllStringSubmatch(des, -1)
-	if len(ss) == 0 {
-		return nil
-	}
-
-	var items []*oneItem
-	for _, j := range ss {
-		if len(j) == 2 {
-			urlDecoded := strings.Replace(j[1], "&amp;", "&", -1)
-			it := &oneItem{url: urlDecoded, desc: des}
-			items = append(items, it)
-		}
-	}
-
-	return items
-}
-
-func parseCNUPhoto(item *gofeed.Item, seed string) []*oneItem {
+func parseCommonPhoto(item *gofeed.Item, seed string) []*oneItem {
 	des := item.Description
 	reg := regexp.MustCompile(`.*?<img src="(.*?://.*?.jpg)".*?>+`)
 	ss := reg.FindAllStringSubmatch(des, -1)
@@ -291,32 +272,6 @@ func main() {
 				ch <- o
 				c++
 				checkAndSleep(c)
-			} else if account.Type == MMFan {
-				o = &OneUser{
-					account:   seed,
-					folder:    account.Dir,
-					rsshubUrl: "https://rsshub.rssforever.com/95mm/tab/热门",
-					parser:    parseMMFanPhoto,
-					client:    clientWithoutProxy,
-					noDesc:    account.NoDesc,
-					aType:     account.Type,
-				}
-				ch <- o
-				c++
-				checkAndSleep(c)
-			} else if account.Type == CNU {
-				o = &OneUser{
-					account:   seed,
-					folder:    account.Dir,
-					rsshubUrl: "https://rsshub.rssforever.com/cnu/selected",
-					parser:    parseCNUPhoto,
-					client:    clientWithoutProxy,
-					noDesc:    account.NoDesc,
-					aType:     account.Type,
-				}
-				ch <- o
-				c++
-				checkAndSleep(c)
 			} else if account.Type == WikiDailyPhotoRSS {
 				o = &OneUser{
 					account:   seed,
@@ -343,7 +298,7 @@ func main() {
 				ch <- o
 				c++
 				checkAndSleep(c)
-			} else {
+			} else if account.Type == "" {
 				for _, t := range []string{"media", "user"} {
 					o = &OneUser{
 						account:   seed,
@@ -358,6 +313,29 @@ func main() {
 					c++
 					checkAndSleep(c)
 				}
+			} else {
+				o = &OneUser{
+					account: seed,
+					folder:  account.Dir,
+					parser:  parseCommonPhoto,
+					noDesc:  account.NoDesc,
+					aType:   account.Type,
+				}
+				switch account.Type {
+				case CNU:
+					o.rsshubUrl = "https://rsshub.rssforever.com/cnu/selected"
+					o.client = clientWithoutProxy
+				case MMFan:
+					o.rsshubUrl = "https://rsshub.rssforever.com/95mm/tab/热门"
+					o.client = clientWithoutProxy
+				case WallPaper:
+					o.client = client
+					o.rsshubUrl = "https://rsshub.app/konachan/post/popular_recent/1w"
+				}
+
+				ch <- o
+				c++
+				checkAndSleep(c)
 			}
 		}
 	}
@@ -451,7 +429,7 @@ func dealWithOneUrl(user *OneUser) {
 	)
 	s := time.Now()
 	p := gofeed.NewParser()
-	if user.aType == WikiDailyPhotoRSS {
+	if user.aType == WikiDailyPhotoRSS || user.aType == WallPaper {
 		p.Client = user.client
 	}
 	p.UserAgent = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/97.0.4692.71 Safari/537.36"
