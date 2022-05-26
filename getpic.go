@@ -32,7 +32,10 @@ import (
 const (
 	RssHubTwitterUrl   = "https://rsshub.rssforever.com/twitter"
 	RssHubTelegramUrl  = "https://rsshub.rssforever.com/telegram/channel"
+	ThirtyFivePhotoUrl = "https://rsshub.rssforever.com/35photo"
 	DefaultDir         = "."
+
+	ThirtyFivePhotoRss = "35photo"
 	TelegramChannelRss = "telegramchannel"
 	WikiDailyPhotoRSS  = "wikidailyphotorss"
 	DailyArt           = "dailyart"
@@ -259,7 +262,20 @@ func main() {
 	for _, account := range config.Accounts {
 		for _, seed := range account.Seeds {
 			var o *OneUser
-			if account.Type == TelegramChannelRss {
+			if account.Type == ThirtyFivePhotoRss {
+				o = &OneUser{
+					account:   seed,
+					folder:    fmt.Sprintf("%s%c%s", account.Dir, os.PathSeparator, dateStr),
+					rsshubUrl: fmt.Sprintf("%s/%s", ThirtyFivePhotoUrl, seed),
+					parser:    parseOneTelegramItem,
+					client:    client,
+					noDesc:    account.NoDesc,
+					aType:     account.Type,
+				}
+				ch <- o
+				c++
+				checkAndSleep(c)
+			} else if account.Type == TelegramChannelRss {
 				o = &OneUser{
 					account:   seed,
 					folder:    fmt.Sprintf("%s%c%s", account.Dir, os.PathSeparator, dateStr),
