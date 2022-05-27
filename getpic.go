@@ -55,6 +55,7 @@ type Account struct {
 	Seeds  []string `yaml:"seeds"`
 	Type   string   `yaml:"type"`
 	NoDesc bool     `yaml:"no_desc"`
+	NoDate bool     `yaml:"no_date"`
 }
 
 type HttpProxy struct {
@@ -316,9 +317,14 @@ func main() {
 				checkAndSleep(c)
 			} else if account.Type == "" {
 				for _, t := range []string{"media", "user"} {
+					folder := account.Dir
+					if !account.NoDate {
+						folder += fmt.Sprintf("%c/%s", os.PathSeparator, dateStr)
+					}
+
 					o = &OneUser{
 						account:   seed,
-						folder:    fmt.Sprintf("%s%c%s", account.Dir, os.PathSeparator, dateStr),
+						folder:    folder,
 						rsshubUrl: fmt.Sprintf("%s/%s/%s", RssHubTwitterUrl, t, seed),
 						parser:    parseOneTwitterItem,
 						client:    client,
