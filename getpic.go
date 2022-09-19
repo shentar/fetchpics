@@ -33,8 +33,10 @@ const (
 	RssHubTwitterUrl   = "https://rsshub.rssforever.com/twitter"
 	RssHubTelegramUrl  = "https://rsshub.rssforever.com/telegram/channel"
 	ThirtyFivePhotoUrl = "https://rsshub.rssforever.com/35photo"
+	RsshubDouyinUrl    = "https://rsshub.app/douyin/user"
 	DefaultDir         = "."
 
+	Douyin             = "douyin"
 	ThirtyFivePhotoRss = "35photo"
 	TelegramChannelRss = "telegramchannel"
 	WikiDailyPhotoRSS  = "wikidailyphotorss"
@@ -45,9 +47,10 @@ const (
 )
 
 type oneItem struct {
-	url  string
-	desc string
-	guid string
+	url      string
+	desc     string
+	guid     string
+	fileName string
 }
 
 type Account struct {
@@ -153,6 +156,39 @@ func parseOneWikiPhoto(item *gofeed.Item, seed string) []*oneItem {
 	return items
 }
 
+func parseDouyinVideo(item *gofeed.Item, seed string) []*oneItem {
+	des := item.Description
+	reg := regexp.MustCompile(`.*<a href="(.*)" rel="noreferrer">视频直链</a>`)
+	ss := reg.FindAllStringSubmatch(des, -1)
+	if len(ss) == 0 {
+		return nil
+	}
+
+	var items []*oneItem
+
+	if len(ss) != 1 || len(ss[0]) != 2 {
+		return items
+	}
+
+	urlDecoded := strings.Replace(ss[0][1], "&amp;", "&", -1)
+	it := &oneItem{url: urlDecoded, desc: des}
+	replacer := strings.NewReplacer(
+		"!", "_", "@", "_", "#", "_",
+		"$", "_", "%", "_", "^", "_", "*", "_",
+		"&", "_", ".", "_", ",", "_",
+		"\\", "_", "/", "_", "|", "_",
+		"~", "_", "?", "_", "]", "_",
+		"[", "_", "{", "_", "}", "_",
+		"<", "_", ">", "_",
+	)
+	title := replacer.Replace(item.Title)
+	it.fileName = fmt.Sprintf("%s.mp4", title)
+
+	items = append(items, it)
+
+	return items
+}
+
 func parseCommonPhoto(item *gofeed.Item, seed string) []*oneItem {
 	des := item.Description
 	reg := regexp.MustCompile(`.*?<img src="(.*?://.*?.jpg)".*?>+`)
@@ -191,6 +227,8 @@ type OneUser struct {
 	aType     string
 }
 
+var client, clientWithoutProxy *http.Client
+
 func main() {
 	if len(os.Args) == 3 && os.Args[1] == "format" {
 		err := formatConf(os.Args[2])
@@ -222,7 +260,7 @@ func main() {
 	libPicDir = fmt.Sprintf("%s%c%s", rootDir, os.PathSeparator, "libpics")
 	photoDir = fmt.Sprintf("%s%c%s", rootDir, os.PathSeparator, "pics")
 
-	client := &http.Client{
+	client = &http.Client{
 		Timeout: 900 * time.Second,
 	}
 
@@ -245,7 +283,7 @@ func main() {
 		}
 	}
 
-	clientWithoutProxy := &http.Client{
+	clientWithoutProxy = &http.Client{
 		Timeout: 900 * time.Second,
 	}
 
@@ -335,6 +373,19 @@ func main() {
 					c++
 					checkAndSleep(c)
 				}
+			} else if account.Type == Douyin {
+				o = &OneUser{
+					account:   seed,
+					folder:    account.Dir,
+					rsshubUrl: fmt.Sprintf("%s/%s", RsshubDouyinUrl, seed),
+					parser:    parseDouyinVideo,
+					client:    clientWithoutProxy,
+					noDesc:    account.NoDesc,
+					aType:     account.Type,
+				}
+				ch <- o
+				c++
+				checkAndSleep(c)
 			} else {
 				o = &OneUser{
 					account: seed,
@@ -446,14 +497,15 @@ func getConf(fPath string) (*Conf, error) {
 
 func dealWithOneUrl(user *OneUser) {
 	var (
-		client             = user.client
+		cli                = user.client
 		feedUrl, seed, dir = user.rsshubUrl, user.account, user.folder
 	)
 	s := time.Now()
 	p := gofeed.NewParser()
-	if user.aType == WikiDailyPhotoRSS || user.aType == WallPaper {
-		p.Client = user.client
+	if user.aType == WikiDailyPhotoRSS || user.aType == WallPaper || user.aType == Douyin {
+		p.Client = client
 	}
+
 	p.UserAgent = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/97.0.4692.71 Safari/537.36"
 	feed, err := p.ParseURL(feedUrl)
 	if err != nil {
@@ -493,7 +545,7 @@ func dealWithOneUrl(user *OneUser) {
 			log.Warn(err)
 			return err
 		}
-		res, err := client.Do(req)
+		res, err := cli.Do(req)
 		if err != nil {
 			log.Warnf("failed to get pic: %s", u)
 			log.Error(err)
@@ -519,8 +571,15 @@ func dealWithOneUrl(user *OneUser) {
 
 		fileDir := fmt.Sprintf("%s%c%s", photoDir, os.PathSeparator, dir)
 		_ = os.MkdirAll(fileDir, os.ModeDir|0755)
-		filePath := fmt.Sprintf("%s%c%s%s", fileDir, os.PathSeparator,
-			strings.Replace(seed, "/", "", -1)+"_"+fileName, getFileType(pic))
+
+		var filePath string
+		if item.fileName != "" {
+			filePath = fmt.Sprintf("%s%c%s", fileDir, os.PathSeparator, item.fileName)
+		} else {
+			filePath = fmt.Sprintf("%s%c%s%s", fileDir, os.PathSeparator,
+				strings.Replace(seed, "/", "", -1)+"_"+fileName, getFileType(pic))
+		}
+
 		f, err := os.OpenFile(filePath, os.O_RDWR|os.O_CREATE, 0755)
 		if err != nil {
 			log.Error(err)
