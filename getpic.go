@@ -15,73 +15,14 @@ import (
 	"github.com/dsoprea/go-utility/v2/image"
 	"github.com/mmcdole/gofeed"
 	log "github.com/sirupsen/logrus"
-	"gopkg.in/yaml.v3"
 	"io/ioutil"
 	"net/http"
 	"net/url"
 	"os"
-	"path/filepath"
-	"regexp"
-	"runtime"
-	"sort"
 	"strings"
 	"sync"
 	"time"
 )
-
-const (
-	RssHubTwitterUrl   = "https://rsshub.rssforever.com/twitter"
-	RssHubTelegramUrl  = "https://rsshub.rssforever.com/telegram/channel"
-	ThirtyFivePhotoUrl = "https://rsshub.rssforever.com/35photo"
-	RsshubDouyinUrl    = "https://rsshub.app/douyin/user"
-	DefaultDir         = "."
-
-	Douyin             = "douyin"
-	ThirtyFivePhotoRss = "35photo"
-	TelegramChannelRss = "telegramchannel"
-	WikiDailyPhotoRSS  = "wikidailyphotorss"
-	DailyArt           = "dailyart"
-	MMFan              = "mmfan"
-	CNU                = "cnu"
-	WallPaper          = "wallpaper"
-)
-
-type oneItem struct {
-	url      string
-	desc     string
-	guid     string
-	fileName string
-}
-
-type Account struct {
-	Dir    string   `yaml:"dir"`
-	Seeds  []string `yaml:"seeds"`
-	Type   string   `yaml:"type"`
-	NoDesc bool     `yaml:"no_desc"`
-	NoDate bool     `yaml:"no_date"`
-}
-
-type HttpProxy struct {
-	UseProxy bool   `yaml:"use_proxy"`
-	Host     string `yaml:"host"`
-	Port     uint16 `yaml:"port"`
-	Protocol string `yaml:"protocol"`
-	User     string `yaml:"user"`
-	Password string `yaml:"password"`
-}
-
-type Conf struct {
-	Accounts  []Account `yaml:"accounts"`
-	Proxy     HttpProxy `yaml:"http_proxy"`
-	RssHubUrl string    `yaml:"rsshub_url"`
-	PhotoDir  string    `yaml:"photo_dir"`
-}
-
-func callerPrettyFieldForLogrus(caller *runtime.Frame) (string, string) {
-	fileName := filepath.Base(caller.File)
-	funcName := filepath.Base(caller.Function)
-	return funcName, fmt.Sprintf("%s:%d", fileName, caller.Line)
-}
 
 var (
 	config    *Conf
@@ -89,132 +30,15 @@ var (
 	libPicDir string
 	photoDir  string
 	dateStr   string
+
+	client, clientWithoutProxy *http.Client
 )
 
-type parser func(item *gofeed.Item, seed string) []*oneItem
-
-func parseOneTwitterItem(item *gofeed.Item, seed string) []*oneItem {
-	des := item.Description
-	reg := regexp.MustCompile(`<img style.*? src="(.*?=orig)"+`)
-	ss := reg.FindAllStringSubmatch(des, -1)
-	if len(ss) == 0 {
-		return nil
-	}
-
-	var items []*oneItem
-	for _, j := range ss {
-		if len(j) == 2 {
-			urlDecoded := strings.Replace(j[1], "&amp;", "&", -1)
-			it := &oneItem{url: urlDecoded, desc: des + fmt.Sprintf("@%s", seed)}
-
-			items = append(items, it)
-		}
-	}
-
-	return items
-}
-
-func parseOneTelegramItem(item *gofeed.Item, seed string) []*oneItem {
-	des := item.Description
-	reg := regexp.MustCompile(`<img src="(.*?\.(jpg|png))" referrerpolicy="no-referrer">+`)
-	ss := reg.FindAllStringSubmatch(des, -1)
-	if len(ss) == 0 {
-		return nil
-	}
-
-	var items []*oneItem
-	for _, j := range ss {
-		if len(j) == 3 {
-			urlDecoded := strings.Replace(j[1], "&amp;", "&", -1)
-			it := &oneItem{url: urlDecoded, desc: des + fmt.Sprintf("@%s", seed)}
-
-			items = append(items, it)
-		}
-	}
-
-	return items
-}
-
-func parseOneWikiPhoto(item *gofeed.Item, seed string) []*oneItem {
-	des := item.Description
-	reg := regexp.MustCompile(`.*<img.*?src="(//.*?.jpg)/+`)
-	ss := reg.FindAllStringSubmatch(des, -1)
-	if len(ss) == 0 {
-		return nil
-	}
-
-	var items []*oneItem
-	for _, j := range ss {
-		if len(j) == 2 {
-			urlDecoded := strings.Replace(j[1], "&amp;", "&", -1)
-			urlDecoded = strings.Replace(urlDecoded, "/thumb/", "/", -1)
-			it := &oneItem{url: "https:" + urlDecoded, desc: des}
-			items = append(items, it)
-		}
-	}
-
-	return items
-}
-
-func parseDouyinVideo(item *gofeed.Item, seed string) []*oneItem {
-	des := item.Description
-	reg := regexp.MustCompile(`.*<a href="(.*)" rel="noreferrer">视频直链</a>`)
-	ss := reg.FindAllStringSubmatch(des, -1)
-	if len(ss) == 0 {
-		return nil
-	}
-
-	var items []*oneItem
-
-	if len(ss) != 1 || len(ss[0]) != 2 {
-		return items
-	}
-
-	urlDecoded := strings.Replace(ss[0][1], "&amp;", "&", -1)
-	it := &oneItem{url: urlDecoded, desc: des}
-	replacer := strings.NewReplacer(
-		"!", "_", "@", "_", "#", "_",
-		"$", "_", "%", "_", "^", "_", "*", "_",
-		"&", "_", ".", "_", ",", "_",
-		"\\", "_", "/", "_", "|", "_",
-		"~", "_", "?", "_", "]", "_",
-		"[", "_", "{", "_", "}", "_",
-		"<", "_", ">", "_", "|", " ",
-	)
-	title := replacer.Replace(item.Title)
-	it.fileName = fmt.Sprintf("%s.mp4", title)
-
-	items = append(items, it)
-
-	return items
-}
-
-func parseCommonPhoto(item *gofeed.Item, seed string) []*oneItem {
-	des := item.Description
-	reg := regexp.MustCompile(`.*?<img src="(.*?://.*?.jpg)".*?>+`)
-	ss := reg.FindAllStringSubmatch(des, -1)
-	if len(ss) == 0 {
-		return nil
-	}
-
-	var items []*oneItem
-	for _, j := range ss {
-		if len(j) == 2 {
-			urlDecoded := strings.Replace(j[1], "&amp;", "&", -1)
-			it := &oneItem{url: urlDecoded, desc: des}
-			items = append(items, it)
-		}
-	}
-
-	return items
-}
-
-func parseDailyArt(item *gofeed.Item, seed string) []*oneItem {
-	guid := item.GUID
-	urlDecoded := strings.Replace(guid, "&amp;", "&", -1)
-	it := &oneItem{url: urlDecoded, desc: item.Description + fmt.Sprintf("@%s", seed)}
-
-	return []*oneItem{it}
+type oneItem struct {
+	url      string
+	desc     string
+	guid     string
+	fileName string
 }
 
 type OneUser struct {
@@ -226,8 +50,6 @@ type OneUser struct {
 	client    *http.Client
 	aType     string
 }
-
-var client, clientWithoutProxy *http.Client
 
 func main() {
 	if len(os.Args) == 3 && os.Args[1] == "format" {
@@ -429,72 +251,6 @@ func doOneTask(ch chan *OneUser) {
 	}
 }
 
-func formatConf(fPath string) error {
-	c, err := getConf(fPath)
-	if err != nil {
-		return err
-	}
-
-	for _, a := range c.Accounts {
-		sort.Slice(a.Seeds, func(i, j int) bool {
-			return a.Seeds[i] < a.Seeds[j]
-		})
-	}
-
-	o, err := yaml.Marshal(c)
-	if err != nil {
-		return err
-	}
-
-	fmt.Println(string(o))
-
-	f, err := os.OpenFile(fPath+".tmp", os.O_WRONLY|os.O_CREATE, 0755)
-	if err != nil {
-		return err
-	}
-	defer func(f *os.File) {
-		_ = f.Close()
-	}(f)
-
-	fe := yaml.NewEncoder(f)
-	fe.SetIndent(2)
-	err = fe.Encode(c)
-	if err != nil {
-		return err
-	}
-	_ = fe.Close()
-
-	err = os.Rename(fPath+".tmp", fPath)
-	if err != nil {
-		return err
-	}
-
-	return nil
-}
-
-func getConf(fPath string) (*Conf, error) {
-	c := Conf{}
-
-	f, err := os.OpenFile(fPath, os.O_RDONLY, 0755)
-	if err != nil {
-		return nil, err
-	}
-	defer func(f *os.File) {
-		_ = f.Close()
-	}(f)
-
-	d, err := ioutil.ReadAll(f)
-	if err != nil {
-		return nil, err
-	}
-	err = yaml.Unmarshal(d, &c)
-	if err != nil {
-		return nil, err
-	}
-
-	return &c, nil
-}
-
 func dealWithOneUrl(user *OneUser) {
 	var (
 		cli                = user.client
@@ -574,9 +330,9 @@ func dealWithOneUrl(user *OneUser) {
 
 		var filePath string
 		if item.fileName != "" {
-			filePath = fmt.Sprintf("%s%c%s", fileDir, os.PathSeparator, item.fileName)
+			filePath = fmt.Sprintf("%s%c%s.tmp", fileDir, os.PathSeparator, item.fileName)
 		} else {
-			filePath = fmt.Sprintf("%s%c%s%s", fileDir, os.PathSeparator,
+			filePath = fmt.Sprintf("%s%c%s%s.tmp", fileDir, os.PathSeparator,
 				strings.Replace(seed, "/", "", -1)+"_"+fileName, getFileType(pic))
 		}
 
@@ -603,7 +359,37 @@ func dealWithOneUrl(user *OneUser) {
 			return err
 		}
 
-		log.Warnf("done one account: %s, u: %s, file: %s, cost: %dms", seed, u, filePath, time.Since(start)/time.Millisecond)
+		// 转正文件。
+		fstat, err := os.Stat(filePath)
+		if err != nil {
+			return err
+		}
+		dstFilePath := strings.TrimRight(filePath, ".tmp")
+		fdstat, err := os.Stat(dstFilePath)
+		if err == nil {
+			// 同名文件的size比新文件小，则覆盖，否则保留
+			if fdstat.Size() < fstat.Size() {
+				_ = os.Remove(dstFilePath)
+				_ = os.Rename(filePath, dstFilePath)
+			} else {
+				_ = os.Remove(filePath)
+			}
+		} else {
+			// 新文件则直接转正。
+			if os.IsNotExist(err) {
+				// 丢弃小于8MB的MP4文件。
+				if strings.HasSuffix(filePath, ".mp4.tmp") && fstat.Size() < 1048576*8 {
+					_ = os.Remove(filePath)
+				} else {
+					_ = os.Rename(filePath, dstFilePath)
+				}
+			} else {
+				log.Warnf("some error: %s", err.Error())
+				return err
+			}
+		}
+
+		log.Warnf("done one account: %s, u: %s, file: %s, cost: %dms", seed, u, dstFilePath, time.Since(start)/time.Millisecond)
 		return nil
 	}
 
