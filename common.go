@@ -7,7 +7,7 @@ import (
 	"strings"
 )
 
-type parser func(item *gofeed.Item, seed string) []*oneItem
+type Parser func(item *gofeed.Item, seed string) []*oneItem
 
 func parseOneTwitterItem(item *gofeed.Item, seed string) []*oneItem {
 	des := item.Description

@@ -25,11 +25,12 @@ import (
 )
 
 var (
-	config    *Conf
-	rootDir   string
-	libPicDir string
-	photoDir  string
-	dateStr   string
+	config       *Conf
+	rootDir      string
+	libPicDir    string
+	photoDir     string
+	dateStr      string
+	allTaskCount int
 
 	client, clientWithoutProxy *http.Client
 )
@@ -45,7 +46,7 @@ type OneUser struct {
 	account   string
 	folder    string
 	rsshubUrl string
-	parser    parser
+	parser    Parser
 	noDesc    bool
 	client    *http.Client
 	aType     string
@@ -119,124 +120,44 @@ func main() {
 		}()
 	}
 
-	c := 0
 	for _, account := range config.Accounts {
 		for _, seed := range account.Seeds {
-			var o *OneUser
 			if account.Type == ThirtyFivePhotoRss {
-				o = &OneUser{
-					account:   seed,
-					folder:    fmt.Sprintf("%s%c%s", account.Dir, os.PathSeparator, dateStr),
-					rsshubUrl: fmt.Sprintf("%s/%s", ThirtyFivePhotoUrl, seed),
-					parser:    parseOneTelegramItem,
-					client:    client,
-					noDesc:    account.NoDesc,
-					aType:     account.Type,
-				}
-				ch <- o
-				c++
-				checkAndSleep(c)
+				addOneTask(ch, NewThirtyFivePhoto(seed, &account))
 			} else if account.Type == TelegramChannelRss {
-				o = &OneUser{
-					account:   seed,
-					folder:    fmt.Sprintf("%s%c%s", account.Dir, os.PathSeparator, dateStr),
-					rsshubUrl: fmt.Sprintf("%s/%s", RssHubTelegramUrl, seed),
-					parser:    parseOneTelegramItem,
-					client:    client,
-					noDesc:    account.NoDesc,
-					aType:     account.Type,
-				}
-				ch <- o
-				c++
-				checkAndSleep(c)
+				addOneTask(ch, NewTelegramChannel(seed, &account))
 			} else if account.Type == WikiDailyPhotoRSS {
-				o = &OneUser{
-					account:   seed,
-					folder:    account.Dir,
-					rsshubUrl: "https://zh.wikipedia.org/w/api.php?action=featuredfeed&feed=potd&feedformat=atom",
-					parser:    parseOneWikiPhoto,
-					client:    client,
-					noDesc:    account.NoDesc,
-					aType:     account.Type,
-				}
-				ch <- o
-				c++
-				checkAndSleep(c)
+				addOneTask(ch, NewWikiDailyPhoto(seed, &account))
 			} else if account.Type == DailyArt {
-				o = &OneUser{
-					account:   seed,
-					folder:    account.Dir,
-					rsshubUrl: "https://rsshub.rssforever.com/dailyart/zh",
-					parser:    parseDailyArt,
-					client:    client,
-					noDesc:    account.NoDesc,
-					aType:     account.Type,
-				}
-				ch <- o
-				c++
-				checkAndSleep(c)
+				addOneTask(ch, NewDailyArt(seed, &account))
 			} else if account.Type == "" {
 				for _, t := range []string{"media", "user"} {
-					folder := account.Dir
-					if !account.NoDate {
-						folder += fmt.Sprintf("%c/%s", os.PathSeparator, dateStr)
-					}
-
-					o = &OneUser{
-						account:   seed,
-						folder:    folder,
-						rsshubUrl: fmt.Sprintf("%s/%s/%s", RssHubTwitterUrl, t, seed),
-						parser:    parseOneTwitterItem,
-						client:    client,
-						noDesc:    account.NoDesc,
-						aType:     account.Type,
-					}
-					ch <- o
-					c++
-					checkAndSleep(c)
+					addOneTask(ch, NewTwitter(seed, &account, t))
 				}
 			} else if account.Type == Douyin {
-				o = &OneUser{
-					account:   seed,
-					folder:    account.Dir,
-					rsshubUrl: fmt.Sprintf("%s/%s", RsshubDouyinUrl, seed),
-					parser:    parseDouyinVideo,
-					client:    clientWithoutProxy,
-					noDesc:    account.NoDesc,
-					aType:     account.Type,
-				}
-				ch <- o
-				c++
-				checkAndSleep(c)
+				addOneTask(ch, NewDouyin(seed, &account))
 			} else {
-				o = &OneUser{
-					account: seed,
-					folder:  account.Dir,
-					parser:  parseCommonPhoto,
-					noDesc:  account.NoDesc,
-					aType:   account.Type,
-				}
 				switch account.Type {
 				case CNU:
-					o.rsshubUrl = "https://rsshub.rssforever.com/cnu/selected"
-					o.client = clientWithoutProxy
+					addOneTask(ch, NewCNU(seed, &account))
 				case MMFan:
-					o.rsshubUrl = "https://rsshub.rssforever.com/95mm/tab/热门"
-					o.client = clientWithoutProxy
+					addOneTask(ch, NewMMFan(seed, &account))
 				case WallPaper:
-					o.client = client
-					o.rsshubUrl = "https://rsshub.app/konachan/post/popular_recent/1w"
+					addOneTask(ch, NewWallPaper(seed, &account))
 				}
-
-				ch <- o
-				c++
-				checkAndSleep(c)
 			}
 		}
 	}
 
 	close(ch)
 	sg.Wait()
+}
+
+func addOneTask(ch chan *OneUser, o *OneUser) int {
+	ch <- o
+	allTaskCount++
+	checkAndSleep(allTaskCount)
+	return 1
 }
 
 func checkAndSleep(c int) {
