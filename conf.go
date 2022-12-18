@@ -14,7 +14,7 @@ const (
 	RssHubTwitterUrl   = "https://rsshub.rssforever.com/twitter"
 	RssHubTelegramUrl  = "https://rsshub.rssforever.com/telegram/channel"
 	ThirtyFivePhotoUrl = "https://rsshub.rssforever.com/35photo"
-	RsshubDouyinUrl    = "https://rsshub.app/douyin/user"
+	RsshubDouyinUrl    = "https://rsshub.codefine.site:6870/douyin/user"
 	DefaultDir         = "."
 
 	Douyin             = "douyin"

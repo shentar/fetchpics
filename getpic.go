@@ -179,7 +179,7 @@ func dealWithOneUrl(user *OneUser) {
 	)
 	s := time.Now()
 	p := gofeed.NewParser()
-	if user.aType == WikiDailyPhotoRSS || user.aType == WallPaper || user.aType == Douyin {
+	if user.aType == WikiDailyPhotoRSS || user.aType == WallPaper {
 		p.Client = client
 	}
 
