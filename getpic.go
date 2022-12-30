@@ -43,13 +43,14 @@ type oneItem struct {
 }
 
 type OneUser struct {
-	account   string
-	folder    string
-	rsshubUrl string
-	parser    Parser
-	noDesc    bool
-	client    *http.Client
-	aType     string
+	account          string
+	folder           string
+	rsshubUrl        string
+	parser           Parser
+	noDesc           bool
+	feedParserClient *http.Client
+	contentClient    *http.Client
+	aType            string
 }
 
 func main() {
@@ -174,14 +175,11 @@ func doOneTask(ch chan *OneUser) {
 
 func dealWithOneUrl(user *OneUser) {
 	var (
-		cli                = user.client
 		feedUrl, seed, dir = user.rsshubUrl, user.account, user.folder
 	)
 	s := time.Now()
 	p := gofeed.NewParser()
-	if user.aType == WikiDailyPhotoRSS || user.aType == WallPaper {
-		p.Client = client
-	}
+	p.Client = user.feedParserClient
 
 	p.UserAgent = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/97.0.4692.71 Safari/537.36"
 	feed, err := p.ParseURL(feedUrl)
@@ -222,7 +220,7 @@ func dealWithOneUrl(user *OneUser) {
 			log.Warn(err)
 			return err
 		}
-		res, err := cli.Do(req)
+		res, err := user.contentClient.Do(req)
 		if err != nil {
 			log.Warnf("failed to get pic: %s", u)
 			log.Error(err)

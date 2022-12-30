@@ -34,11 +34,14 @@ func callerPrettyFieldForLogrus(caller *runtime.Frame) (string, string) {
 }
 
 type Account struct {
-	Dir    string   `yaml:"dir"`
-	Seeds  []string `yaml:"seeds"`
-	Type   string   `yaml:"type"`
-	NoDesc bool     `yaml:"no_desc"`
-	NoDate bool     `yaml:"no_date"`
+	Dir             string   `yaml:"dir"`
+	Seeds           []string `yaml:"seeds"`
+	Type            string   `yaml:"type"`
+	NoDesc          bool     `yaml:"no_desc"`
+	NoDate          bool     `yaml:"no_date"`
+	Url             string   `yaml:"url"`
+	FeedUseProxy    bool     `yaml:"feed_use_proxy"`
+	ContentUseProxy bool     `yaml:"content_use_proxy"`
 }
 
 type HttpProxy struct {
