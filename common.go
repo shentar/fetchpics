@@ -98,8 +98,13 @@ func parseDouyinVideo(item *gofeed.Item, seed string) []*oneItem {
 		"<", "_", ">", "_", "|", " ",
 	)
 	title := replacer.Replace(item.Title)
-	it.fileName = fmt.Sprintf("%s.mp4", title)
 
+	prefix := seed
+	if len(seed) > 5 {
+		prefix = seed[len(seed)-5:]
+	}
+
+	it.fileName = fmt.Sprintf("%s_%s.mp4", prefix, title)
 	items = append(items, it)
 
 	return items
